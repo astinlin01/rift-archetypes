@@ -101,6 +101,27 @@ class RiotClient:
         )
         return self._get(url, params={"page": page})
 
+    def get_top_league(self, queue: str, tier: str) -> dict:
+        """Pull top-tier league payload for MASTER, GRANDMASTER, or CHALLENGER."""
+        tier_normalized = tier.upper()
+        allowed = {"MASTER", "GRANDMASTER", "CHALLENGER"}
+        if tier_normalized not in allowed:
+            raise ValueError(f"tier must be one of {sorted(allowed)} for get_top_league")
+
+        endpoint_map = {
+            "MASTER": "masterleagues",
+            "GRANDMASTER": "grandmasterleagues",
+            "CHALLENGER": "challengerleagues",
+        }
+        endpoint = endpoint_map[tier_normalized]
+        url = f"https://{self.platform}.api.riotgames.com/lol/league/v4/{endpoint}/by-queue/{queue}"
+        return self._get(url)
+
+    def get_summoner_by_id(self, summoner_id: str) -> dict:
+        """Resolve encrypted summonerId to summoner-v4 payload, including puuid."""
+        url = f"https://{self.platform}.api.riotgames.com/lol/summoner/v4/summoners/{summoner_id}"
+        return self._get(url)
+
     def get_match_ids(self, puuid: str, queue: int = 420, count: int = 20, start: int = 0) -> list:
         """Pull ranked match IDs for a player by puuid."""
         url = f"https://{self.region}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
