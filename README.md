@@ -63,17 +63,6 @@ Outputs:
 - `data/raw/checkpoints/match_details_checkpoint.json`
 - `data/raw/failures/match_details_failures.ndjson`
 
-## Why your accounts are added in match IDs but not in league pool
-
-This is expected with current design:
-- `fetch_league_pool.py` is a direct snapshot of the selected rank slice from Riot league endpoints.
-- Your accounts are only present there if they naturally belong to that fetched slice.
-- `fetch_match_ids.py` intentionally force-includes your Riot IDs so your accounts are guaranteed in downstream match collection.
-
-In short:
-- league pool = objective rank slice snapshot
-- match ID stage = rank slice snapshot plus required personal accounts
-
 ## Typical run order
 
 1. Build pool
