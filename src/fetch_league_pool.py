@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", default="na1")
     parser.add_argument("--queue", default="RANKED_SOLO_5x5")
     parser.add_argument("--tier", default="DIAMOND")
-    parser.add_argument("--division", default="II")
+    parser.add_argument("--division", default="I")
     parser.add_argument("--num-pages", type=int, default=1)
     parser.add_argument(
         "--positive-winrate-only",
