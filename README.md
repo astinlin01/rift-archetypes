@@ -63,6 +63,18 @@ Outputs:
 - `data/raw/checkpoints/match_details_checkpoint.json`
 - `data/raw/failures/match_details_failures.ndjson`
 
+### src/eda_overview.py
+Profiles the collected JSON/NDJSON files and writes a markdown schema and descriptive-statistics report.
+
+- Report: `data/raw/eda_report.md`
+- Example: `python src/eda_overview.py --max-records 500`
+
+### src/summarize_feature_variables.py
+Reads `eda_report.md`, groups potential participant-level variables by analysis theme, and flags identifiers, target leakage, constants, and sparse fields.
+
+- Report: `data/raw/feature_variable_summary.md`
+- Run: `python src/summarize_feature_variables.py`
+
 ## Typical run order
 
 1. Build pool
