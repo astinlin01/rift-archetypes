@@ -1,11 +1,14 @@
 # Rift Archetypes
 
-Rift Archetypes collects League of Legends solo queue data and prepares it for unsupervised playstyle clustering.
+Rift Archetypes collects League of Legends solo queue data and clusters playstyles per role using unsupervised learning.
 
-Current collection pipeline:
+Pipeline:
 1. Build a player pool from Riot league endpoints.
 2. Fetch and dedupe match IDs across that pool.
-3. Fetch full match payloads for feature engineering.
+3. Fetch full match payloads.
+4. Build a per-participant feature table.
+5. Fit per-role playstyle clusters.
+6. Compare your own matches against a reference tier.
 
 ## Scripts
 
@@ -75,10 +78,42 @@ Reads `eda_report.md`, groups potential participant-level variables by analysis 
 - Report: `data/raw/feature_variable_summary.md`
 - Run: `python src/summarize_feature_variables.py`
 
+### src/feature_config.py
+Curated (hand-reviewed, not auto-parsed) list of participant fields used for clustering, grouped by normalization strategy (already-normalized, per-minute rate, raw count). Update this file when adding/removing candidate features.
+
+### src/build_features.py
+Builds the per-participant feature table used for clustering.
+
+- Drops non-solo-role rows (keeps `TOP`/`JUNGLE`/`MIDDLE`/`BOTTOM`/`UTILITY` only) and remakes/early-surrenders shorter than `--min-game-length-seconds` (default 5 min).
+- Applies per-minute normalization from `feature_config.py`.
+- Attaches source tier per puuid by matching against all `data/raw/league_entries*.json` pool files.
+- Output: `data/processed/participant_features.parquet`
+- Run: `python src/build_features.py`
+
+### src/build_clusters.py
+Fits a separate `StandardScaler` → `PCA` → `KMeans` pipeline per role (role is the dominant driver of raw stats, so clustering is done within-role rather than globally). Sweeps k and reports silhouette score to pick the cluster count per role (override with `--k-override ROLE=K`).
+
+- Models: `models/<role>_cluster.joblib`
+- Cluster assignments: `data/processed/participant_clusters.parquet`
+- Centroid report: `data/processed/cluster_centroid_report.md`
+- Run: `python src/build_clusters.py`
+
+### src/compare_self.py
+Assigns your own matches to the fitted per-role clusters and compares your per-feature averages/percentiles against a reference tier (default Challenger).
+
+- Run: `python src/compare_self.py --riot-id "river3#na1"` (or `--puuid <puuid>`, repeatable)
+- Output: `data/processed/self_comparison.csv`
+
+### notebooks/01_explore_clusters.ipynb
+Exploration only (not required for the pipeline to run) -- PCA scatter plots per role, centroid bar charts, and tier mix per cluster, reading from `data/processed/` and `models/`.
+
 ## Typical run order
 
-1. Build pool
-- `python src/fetch_league_pool.py`
+1. Build pool (one file per tier -- `build_features.py` infers tier from the filename for apex tiers, so don't merge them into one file)
+- `python src/fetch_league_pool.py --tier DIAMOND --division II`
+- `python src/fetch_league_pool.py --tier MASTER --output-path data/raw/league_entries_master.json`
+- `python src/fetch_league_pool.py --tier GRANDMASTER --output-path data/raw/league_entries_grandmaster.json`
+- `python src/fetch_league_pool.py --tier CHALLENGER --output-path data/raw/league_entries_challenger.json`
 
 2. Collect match IDs
 - `python src/fetch_match_ids.py --resume`
@@ -86,7 +121,21 @@ Reads `eda_report.md`, groups potential participant-level variables by analysis 
 3. Fetch match payloads
 - `python src/fetch_match_details.py --resume`
 
+4. Build features
+- `python src/build_features.py`
+
+5. Fit clusters
+- `python src/build_clusters.py`
+
+6. Compare yourself
+- `python src/compare_self.py --riot-id "river3#na1"`
+
+## Not built yet
+
+- Timeline-based features (gold/xp diff curves, item timing) -- a natural V2 on top of the current aggregate-stat features.
+- Pro team clustering -- Riot's public API doesn't expose LCK/LEC/etc. match data; planned to use an external source like Oracle's Elixir.
+
 ## Notes
 
 - Riot developer keys expire frequently. If requests suddenly fail with 401, regenerate key and update `.env`.
-- Raw data files under `data/raw/` are intentionally gitignored.
+- Raw data files under `data/raw/` are intentionally gitignored, as are `data/processed/` and `models/` (both regenerable from `data/raw/`).
