@@ -112,6 +112,11 @@ Assigns your own matches to the fitted per-role clusters and compares your per-f
 ### notebooks/01_explore_clusters.ipynb
 Exploration only (not required for the pipeline to run) -- PCA scatter plots per role, centroid bar charts, and tier mix per cluster, reading from `data/processed/` and `models/`.
 
+### src/export_dashboard_data.py + src/build_dashboard.py
+Builds a self-contained HTML "scouting report" dashboard for one player -- percentile comparison vs. a reference tier, cluster archetype cards, a PCA scatter with your games highlighted, and a recent-games table. `export_dashboard_data.py` writes `data/processed/dashboard_data.json`; `build_dashboard.py` merges it into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.
+
+- Run: `python src/export_dashboard_data.py --riot-id "river3#na1"` then `python src/build_dashboard.py`
+
 ## Typical run order
 
 1. Build pool (one file per tier -- `build_features.py` infers tier from the filename for apex tiers, so don't merge them into one file)
@@ -134,6 +139,14 @@ Exploration only (not required for the pipeline to run) -- PCA scatter plots per
 
 6. Compare yourself
 - `python src/compare_self.py --riot-id "river3#na1"`
+
+7. Build the dashboard
+- `python src/export_dashboard_data.py --riot-id "river3#na1"`
+- `python src/build_dashboard.py`
+
+To refresh with just your own newest games (skips re-scanning the full pool):
+- `python src/fetch_recent_self.py --riot-id "river3#na1"`
+- then re-run steps 4, 6, 7 (no need to refit clusters unless the population itself changed materially)
 
 ## Not built yet
 

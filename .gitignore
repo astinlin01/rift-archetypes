@@ -6,3 +6,4 @@ __pycache__/
 data/raw/
 data/processed/
 models/
+dashboard/river3_scouting_report.html
