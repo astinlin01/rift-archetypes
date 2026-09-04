@@ -1,8 +1,16 @@
 """
-Export a static JSON payload for the self-analysis dashboard (an Artifact,
-not part of this repo). Pulls from the already-built feature table, fitted
-cluster models, and self_comparison.csv -- run build_features.py,
-build_clusters.py, and compare_self.py first.
+Export a static JSON payload for the interactive self-analysis dashboard
+(published as a Claude Artifact, not part of this repo). Pulls from the
+already-built feature table and per-role fitted scaler/PCA -- run
+build_features.py and build_clusters.py first.
+
+Unlike build_clusters.py (which picks one "official" k per role via
+silhouette score for reuse elsewhere, e.g. compare_self.py), this script
+fits several k values per role on the fly purely for the dashboard's
+cluster-count slider. It also precomputes percentile reference curves per
+(role, tier, feature) so the published dashboard can switch game window,
+role, reference tier, and cluster count entirely client-side with no
+server/recompute step.
 
 Run from repo root:
     python src/export_dashboard_data.py --riot-id "river3#na1"
@@ -16,12 +24,18 @@ import os
 import random
 
 import joblib
+import numpy as np
 import pandas as pd
+from sklearn.cluster import KMeans
 
-from feature_config import ALL_FEATURE_FIELDS
+from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
 from pipeline_io import iter_ndjson
 
 FEATURE_COLUMNS = [f.name for f in ALL_FEATURE_FIELDS]
+RANDOM_STATE = 42
+K_OPTIONS = [3, 4, 5, 6]
+MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer rows than this
+BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
 
 # Curated subset + display labels for the headline percentile comparison.
 # invert=True means a lower raw value is typically the better outcome for this role.
@@ -40,27 +54,27 @@ HEADLINE_FEATURES = [
     ("max_cs_advantage_lane_opp", "Max CS lead on opponent", False),
 ]
 
-CLUSTER_NAME_HINTS = {
-    # Fallback label if we can't auto-name from win rate + damage rank.
-}
+# Ordered from "worst win rate" to "best win rate" archetype flavor. For a given k,
+# ranks are spread evenly across this spectrum so the two extremes always carry the
+# same name regardless of how many clusters are chosen.
+ARCHETYPE_NAME_SPECTRUM = [
+    "Passive & Behind",
+    "Under Pressure",
+    "Sustain Skirmisher",
+    "Balanced Contributor",
+    "Snowballing Carry",
+    "Dominant Carry",
+]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export dashboard JSON payload.")
+    parser = argparse.ArgumentParser(description="Export interactive dashboard JSON payload.")
     parser.add_argument("--features-path", default="data/processed/participant_features.parquet")
-    parser.add_argument("--clusters-path", default="data/processed/participant_clusters.parquet")
     parser.add_argument("--models-dir", default="models")
     parser.add_argument("--matches-path", default="data/raw/matches.ndjson")
+    parser.add_argument("--match-ids-path", default="data/raw/match_ids.ndjson")
     parser.add_argument("--riot-id", default="river3#na1")
-    parser.add_argument("--reference-tier", default="CHALLENGER")
-    parser.add_argument("--focus-role", default="BOTTOM")
-    parser.add_argument(
-        "--recent-games",
-        type=int,
-        default=0,
-        help="Most recent games to include. 0 (default) includes all games found for this puuid.",
-    )
-    parser.add_argument("--population-sample", type=int, default=700)
+    parser.add_argument("--population-sample", type=int, default=500, help="Scatter background points per role.")
     parser.add_argument("--output-path", default="data/processed/dashboard_data.json")
     return parser.parse_args()
 
@@ -81,77 +95,169 @@ def load_game_creation_by_match_id(matches_path: str, match_ids: set[str]) -> di
     return creation_by_id
 
 
-CLUSTER_NAMES_BY_WIN_RATE_RANK = {
-    # rank 0 = lowest win rate cluster ... rank (k-1) = highest.
-    0: "Passive & Behind",
-    1: "Sustain Skirmisher",
-    2: "Snowballing Carry",
-    3: "High-Variance Carry",
-}
+def name_for_rank(rank: int, k: int) -> str:
+    if k <= 1:
+        return ARCHETYPE_NAME_SPECTRUM[len(ARCHETYPE_NAME_SPECTRUM) // 2]
+    idx = round(rank / (k - 1) * (len(ARCHETYPE_NAME_SPECTRUM) - 1))
+    return ARCHETYPE_NAME_SPECTRUM[idx]
 
 
-def build_cluster_summary(clusters_df: pd.DataFrame, role: str) -> list[dict]:
-    role_df = clusters_df[clusters_df["teamPosition"] == role]
-    summary = (
-        role_df.groupby("cluster")
-        .agg(n=("cluster", "size"), win_rate=("win", "mean"), damage_per_minute=("damage_per_minute", "mean"))
-        .reset_index()
-        .sort_values("win_rate")
-        .reset_index(drop=True)
-    )
-    summary["name"] = [
-        CLUSTER_NAMES_BY_WIN_RATE_RANK.get(rank, f"Archetype {rank + 1}") for rank in range(len(summary))
-    ]
-    return summary.to_dict("records")
+def fillna_with_median(matrix: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
+    return matrix.fillna(reference.median(numeric_only=True))
 
 
-def build_scatter(role: str, role_df: pd.DataFrame, my_role_df: pd.DataFrame, models_dir: str, sample_size: int) -> dict:
+def build_role_payload(
+    role: str,
+    df: pd.DataFrame,
+    my_role_df: pd.DataFrame,
+    models_dir: str,
+    population_sample: int,
+) -> dict:
+    role_df = df[df["teamPosition"] == role].reset_index(drop=True)
     artifact = joblib.load(os.path.join(models_dir, f"{role.lower()}_cluster.joblib"))
-    matrix = role_df[FEATURE_COLUMNS].fillna(role_df[FEATURE_COLUMNS].median(numeric_only=True))
+
+    matrix = fillna_with_median(role_df[FEATURE_COLUMNS], role_df[FEATURE_COLUMNS])
     scaled = artifact["scaler"].transform(matrix)
-    reduced = artifact["pca"].transform(scaled)
+    reduced_full = artifact["pca"].transform(scaled)  # (n, pca_components)
 
-    population = list(zip(reduced[:, 0].tolist(), reduced[:, 1].tolist(), role_df["cluster"].tolist()))
-    random.Random(42).shuffle(population)
-    population = population[:sample_size]
+    rng = random.Random(RANDOM_STATE)
+    sample_idx = list(range(len(role_df)))
+    rng.shuffle(sample_idx)
+    sample_idx = sample_idx[: min(population_sample, len(sample_idx))]
 
-    my_matrix = my_role_df[FEATURE_COLUMNS].fillna(role_df[FEATURE_COLUMNS].median(numeric_only=True))
+    scatter = {
+        "x": [round(float(v), 4) for v in reduced_full[sample_idx, 0]],
+        "y": [round(float(v), 4) for v in reduced_full[sample_idx, 1]],
+    }
+
+    my_matrix = fillna_with_median(my_role_df[FEATURE_COLUMNS], role_df[FEATURE_COLUMNS])
     my_scaled = artifact["scaler"].transform(my_matrix)
-    my_reduced = artifact["pca"].transform(my_scaled)
-    my_clusters = artifact["kmeans"].predict(my_reduced)
+    my_reduced_full = artifact["pca"].transform(my_scaled) if len(my_role_df) else np.empty((0, reduced_full.shape[1]))
 
-    mine = []
-    for point, cluster, (_, game_row) in zip(my_reduced.tolist(), my_clusters.tolist(), my_role_df.iterrows()):
-        mine.append(
-            {
-                "x": point[0],
-                "y": point[1],
-                "cluster": int(cluster),
-                "champion": game_row["championName"],
-                "win": bool(game_row["win"]),
-            }
-        )
+    clusters_by_k: dict[str, dict] = {}
+    my_cluster_by_k: dict[str, list[int]] = {}
+    for k in K_OPTIONS:
+        if k >= len(role_df):
+            continue
+        kmeans = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10).fit(reduced_full)
+        labels_full = kmeans.labels_
+
+        win_by_cluster = pd.Series(role_df["win"].to_numpy()).groupby(labels_full).mean()
+        size_by_cluster = pd.Series(labels_full).value_counts()
+        ranked = win_by_cluster.sort_values().index.tolist()
+        name_by_cluster = {cluster_id: name_for_rank(rank, k) for rank, cluster_id in enumerate(ranked)}
+
+        clusters_by_k[str(k)] = {
+            "sample_labels": [int(labels_full[i]) for i in sample_idx],
+            "summary": [
+                {
+                    "cluster": int(cluster_id),
+                    "n": int(size_by_cluster[cluster_id]),
+                    "win_rate": round(float(win_by_cluster[cluster_id]), 3),
+                    "name": name_by_cluster[cluster_id],
+                }
+                for cluster_id in sorted(win_by_cluster.index)
+            ],
+        }
+
+        if len(my_reduced_full):
+            my_labels = kmeans.predict(my_reduced_full)
+        else:
+            my_labels = np.array([], dtype=int)
+        my_cluster_by_k[str(k)] = [int(v) for v in my_labels]
+
+    my_scatter_xy = [[round(float(x), 4), round(float(y), 4)] for x, y in my_reduced_full[:, :2].tolist()] if len(my_reduced_full) else []
 
     return {
-        "population": [{"x": x, "y": y, "cluster": int(c)} for x, y, c in population],
-        "mine": mine,
+        "population_scatter": scatter,
+        "clusters_by_k": clusters_by_k,
+        "my_cluster_by_k": my_cluster_by_k,
+        "my_scatter_xy": my_scatter_xy,
     }
+
+
+def build_reference_curves(df: pd.DataFrame, tiers: list[str]) -> dict:
+    reference: dict[str, dict] = {}
+    for role in VALID_ROLES:
+        reference[role] = {}
+        for tier in tiers:
+            tier_role_df = df[(df["tier"] == tier) & (df["teamPosition"] == role)]
+            if len(tier_role_df) < MIN_REFERENCE_SAMPLE:
+                continue
+            feature_curves = {}
+            quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
+            for column, _, _ in HEADLINE_FEATURES:
+                series = tier_role_df[column].dropna()
+                if series.empty:
+                    continue
+                feature_curves[column] = {
+                    "ref_avg": round(float(series.mean()), 3),
+                    "n": int(len(series)),
+                    "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
+                }
+            if feature_curves:
+                reference[role][tier] = feature_curves
+    return reference
 
 
 def run(args: argparse.Namespace) -> None:
     df = pd.read_parquet(args.features_path)
-    clusters_df = pd.read_parquet(args.clusters_path)
 
-    puuid = resolve_puuid_from_match_ids("data/raw/match_ids.ndjson", args.riot_id)
+    puuid = resolve_puuid_from_match_ids(args.match_ids_path, args.riot_id)
     my_df = df[df["puuid"] == puuid].copy()
     if my_df.empty:
         raise RuntimeError(f"No feature rows found for puuid {puuid}. Run build_features.py after fetching matches.")
 
     creation_by_id = load_game_creation_by_match_id(args.matches_path, set(my_df["matchId"]))
     my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
-    my_df = my_df.sort_values("gameCreation", ascending=False)
-    if args.recent_games > 0:
-        my_df = my_df.head(args.recent_games)
+    my_df = my_df.sort_values("gameCreation", ascending=False).reset_index(drop=True)
+
+    tiers = sorted(t for t in df["tier"].unique() if t != "UNKNOWN")
+    print(f"Reference tiers with data: {tiers}")
+
+    print("Building reference percentile curves...")
+    reference = build_reference_curves(df, tiers)
+
+    roles_payload = {}
+    games_by_role_index: dict[str, list[int]] = {role: [] for role in VALID_ROLES}
+    for role in VALID_ROLES:
+        my_role_df = my_df[my_df["teamPosition"] == role].reset_index(drop=True)
+        games_by_role_index[role] = my_df.index[my_df["teamPosition"] == role].tolist()
+        print(f"Building cluster/scatter payload for {role} ({len(my_role_df)} of your games)...")
+        roles_payload[role] = build_role_payload(role, df, my_role_df, args.models_dir, args.population_sample)
+
+    # Attach each of your games' scatter coords + cluster-by-k, matched back to my_df order.
+    scatter_xy_by_row: dict[int, list[float]] = {}
+    cluster_by_k_by_row: dict[int, dict[str, int]] = {}
+    for role in VALID_ROLES:
+        role_indices = games_by_role_index[role]
+        role_payload = roles_payload[role]
+        for local_i, global_i in enumerate(role_indices):
+            if local_i < len(role_payload["my_scatter_xy"]):
+                scatter_xy_by_row[global_i] = role_payload["my_scatter_xy"][local_i]
+            cluster_by_k_by_row[global_i] = {
+                k: labels[local_i] for k, labels in role_payload["my_cluster_by_k"].items() if local_i < len(labels)
+            }
+
+    games = []
+    for i, row in my_df.iterrows():
+        feature_values = {}
+        for column, _, _ in HEADLINE_FEATURES:
+            value = row[column]
+            feature_values[column] = round(float(value), 4) if pd.notna(value) else None
+
+        games.append(
+            {
+                "matchId": row["matchId"],
+                "champion": row["championName"],
+                "role": row["teamPosition"],
+                "win": bool(row["win"]),
+                "gameCreation": int(row["gameCreation"]) if pd.notna(row["gameCreation"]) else None,
+                "features": feature_values,
+                "scatterXY": scatter_xy_by_row.get(i),
+                "clusterByK": cluster_by_k_by_row.get(i, {}),
+            }
+        )
 
     record = {
         "wins": int(my_df["win"].sum()),
@@ -162,89 +268,22 @@ def run(args: argparse.Namespace) -> None:
     role_counts = my_df["teamPosition"].value_counts().to_dict()
     champion_counts = my_df["championName"].value_counts().to_dict()
 
-    focus_role = args.focus_role
-    reference_df = df[(df["tier"] == args.reference_tier.upper()) & (df["teamPosition"] == focus_role)]
-    my_focus_df = my_df[my_df["teamPosition"] == focus_role]
-
-    headline_rows = []
-    for column, label, invert in HEADLINE_FEATURES:
-        your_avg = float(my_focus_df[column].mean())
-        ref_series = reference_df[column].dropna()
-        ref_avg = float(ref_series.mean())
-        if ref_series.empty or pd.isna(your_avg):
-            percentile = 50.0
-        else:
-            from scipy.stats import percentileofscore
-
-            percentile = float(percentileofscore(ref_series, your_avg, kind="mean"))
-
-        # For "lower raw value is the better outcome" stats (deaths, damage taken),
-        # flip the percentile so the dashboard's polarity always means the same
-        # thing: right/positive = performing well, left/negative = performing poorly.
-        performance_percentile = (100.0 - percentile) if invert else percentile
-
-        headline_rows.append(
-            {
-                "feature": column,
-                "label": label,
-                "your_avg": round(your_avg, 3),
-                "ref_avg": round(ref_avg, 3),
-                "percentile": round(performance_percentile, 1),
-                "invert": invert,
-            }
-        )
-
-    role_df_full = clusters_df[clusters_df["teamPosition"] == focus_role].reset_index(drop=True)
-    cluster_summary = build_cluster_summary(clusters_df, focus_role)
-
-    my_cluster_assignments = joblib.load(os.path.join(args.models_dir, f"{focus_role.lower()}_cluster.joblib"))
-    my_matrix = my_focus_df[FEATURE_COLUMNS].fillna(role_df_full[FEATURE_COLUMNS].median(numeric_only=True))
-    my_scaled = my_cluster_assignments["scaler"].transform(my_matrix)
-    my_reduced_full = my_cluster_assignments["pca"].transform(my_scaled)
-    my_focus_df = my_focus_df.copy()
-    my_focus_df["cluster"] = my_cluster_assignments["kmeans"].predict(my_reduced_full)
-
-    your_cluster_counts = my_focus_df["cluster"].value_counts().to_dict()
-    for row in cluster_summary:
-        row["your_count"] = int(your_cluster_counts.get(row["cluster"], 0))
-        row["win_rate"] = round(float(row["win_rate"]), 3)
-        row["damage_per_minute"] = round(float(row["damage_per_minute"]), 1)
-
-    scatter = build_scatter(focus_role, role_df_full, my_focus_df, args.models_dir, args.population_sample)
-
-    games = []
-    for _, row in my_df.iterrows():
-        role = row["teamPosition"]
-        cluster_id = None
-        if role == focus_role:
-            match_cluster_row = my_focus_df[my_focus_df["matchId"] == row["matchId"]]
-            if not match_cluster_row.empty:
-                cluster_id = int(match_cluster_row.iloc[0]["cluster"])
-        games.append(
-            {
-                "matchId": row["matchId"],
-                "champion": row["championName"],
-                "role": role,
-                "win": bool(row["win"]),
-                "kda": round(float(row["kda"]), 2) if pd.notna(row["kda"]) else None,
-                "cs_per_min": round(float(row["cs_per_min"]), 1) if pd.notna(row["cs_per_min"]) else None,
-                "damage_per_minute": round(float(row["damage_per_minute"]), 0) if pd.notna(row["damage_per_minute"]) else None,
-                "vision_score_per_minute": round(float(row["vision_score_per_minute"]), 2) if pd.notna(row["vision_score_per_minute"]) else None,
-                "cluster": cluster_id,
-                "gameCreation": int(row["gameCreation"]) if pd.notna(row["gameCreation"]) else None,
-            }
-        )
-
     payload = {
         "riot_id": args.riot_id,
-        "reference_tier": args.reference_tier,
-        "focus_role": focus_role,
+        "k_options": K_OPTIONS,
+        "tiers": tiers,
+        "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
         "record": record,
         "role_counts": role_counts,
         "champion_counts": champion_counts,
-        "headline_features": headline_rows,
-        "clusters": cluster_summary,
-        "scatter": scatter,
+        "reference": reference,
+        "roles": {
+            role: {
+                "population_scatter": roles_payload[role]["population_scatter"],
+                "clusters_by_k": roles_payload[role]["clusters_by_k"],
+            }
+            for role in VALID_ROLES
+        },
         "games": games,
     }
 
@@ -252,8 +291,9 @@ def run(args: argparse.Namespace) -> None:
     if parent:
         os.makedirs(parent, exist_ok=True)
     with open(args.output_path, "w", encoding="utf-8") as outfile:
-        json.dump(payload, outfile, indent=2)
-    print(f"Dashboard data written to: {args.output_path}")
+        json.dump(payload, outfile)
+    size_kb = os.path.getsize(args.output_path) / 1024
+    print(f"Dashboard data written to: {args.output_path} ({size_kb:.0f} KB)")
 
 
 if __name__ == "__main__":

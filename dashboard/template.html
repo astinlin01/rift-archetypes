@@ -16,9 +16,12 @@
     --accent:      #2a78d6;
     --accent-jade: #1baf7a;
 
-    --slot-low:    #2a78d6; /* Passive & Behind */
-    --slot-mid:    #eb6834; /* Sustain Skirmisher */
-    --slot-high:   #1baf7a; /* Snowballing Carry */
+    --slot-0: #2a78d6; /* blue */
+    --slot-1: #eb6834; /* orange */
+    --slot-2: #1baf7a; /* aqua */
+    --slot-3: #eda100; /* yellow */
+    --slot-4: #e87ba4; /* magenta */
+    --slot-5: #4a3aa7; /* violet */
 
     --div-pos:     #2a78d6;
     --div-neg:     #e34948;
@@ -43,9 +46,12 @@
       --accent:      #3987e5;
       --accent-jade: #199e70;
 
-      --slot-low:    #3987e5;
-      --slot-mid:    #d95926;
-      --slot-high:   #199e70;
+      --slot-0: #3987e5;
+      --slot-1: #d95926;
+      --slot-2: #199e70;
+      --slot-3: #c98500;
+      --slot-4: #d55181;
+      --slot-5: #9085e9;
 
       --div-pos:     #3987e5;
       --div-neg:     #e66767;
@@ -70,9 +76,12 @@
     --accent:      #3987e5;
     --accent-jade: #199e70;
 
-    --slot-low:    #3987e5;
-    --slot-mid:    #d95926;
-    --slot-high:   #199e70;
+    --slot-0: #3987e5;
+    --slot-1: #d95926;
+    --slot-2: #199e70;
+    --slot-3: #c98500;
+    --slot-4: #d55181;
+    --slot-5: #9085e9;
 
     --div-pos:     #3987e5;
     --div-neg:     #e66767;
@@ -112,7 +121,7 @@
   /* ---------- Header ---------- */
   .masthead {
     position: relative;
-    padding: 56px 20px 40px;
+    padding: 56px 20px 28px;
     background:
       radial-gradient(60% 90% at 15% 0%, color-mix(in oklab, var(--accent-jade) 10%, transparent), transparent),
       var(--page);
@@ -143,7 +152,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
-    margin-top: 32px;
+    margin-top: 28px;
   }
   .kpi {
     background: var(--surface);
@@ -158,8 +167,40 @@
     .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
   }
 
+  /* ---------- Filter bar ---------- */
+  .filter-bar {
+    max-width: 1040px;
+    margin: 22px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .filter-field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-field label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted);
+  }
+  .filter-field select {
+    font-family: "Public Sans", sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 30px 7px 10px;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%), linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+    min-width: 132px;
+  }
+  .filter-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   /* ---------- Sections ---------- */
-  section { padding: 48px 0; border-bottom: 1px solid var(--border); }
+  section { padding: 40px 0; border-bottom: 1px solid var(--border); }
   section:last-of-type { border-bottom: none; }
   .section-head { margin-bottom: 22px; max-width: 62ch; }
   .section-head h2 { font-size: 24px; margin-top: 6px; }
@@ -170,6 +211,13 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: var(--shadow);
+  }
+
+  .empty-state {
+    padding: 28px 22px;
+    color: var(--ink-muted);
+    font-size: 13.5px;
+    text-align: center;
   }
 
   /* ---------- Diverging bar chart ---------- */
@@ -205,17 +253,15 @@
   .divbar-value { font-size: 13px; text-align: right; color: var(--ink); }
   .divbar-value .sign { color: var(--ink-muted); font-size: 11px; }
 
-  .legend-row { display: flex; gap: 18px; align-items: center; padding: 0 22px 14px; flex-wrap: wrap; }
+  .legend-row { display: flex; gap: 18px; align-items: center; padding: 14px 22px; flex-wrap: wrap; border-bottom: 1px solid var(--gridline); }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
   .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
 
   /* ---------- Archetype cards ---------- */
-  .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
-  @media (max-width: 760px) { .card-grid { grid-template-columns: 1fr; } }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
   .arch-card { padding: 18px 18px 20px; }
-  .arch-card .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-  .arch-card h3 { font-size: 18px; display: flex; align-items: center; }
-  .arch-card .desc { font-size: 13px; color: var(--ink-2); margin-top: 8px; min-height: 54px; }
+  .arch-card .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
+  .arch-card h3 { font-size: 17px; display: flex; align-items: center; }
   .meter-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-muted); margin-top: 16px; }
   .meter-track { height: 8px; border-radius: 5px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
   .meter-fill { height: 100%; border-radius: 5px; }
@@ -245,8 +291,8 @@
   .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
   .pill.win { background: color-mix(in oklab, var(--good) 16%, transparent); color: var(--good); }
   .pill.loss { background: color-mix(in oklab, var(--critical) 16%, transparent); color: var(--critical); }
-  .arch-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-  .arch-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .arch-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  .arch-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
   /* ---------- Tooltip ---------- */
   #tooltip {
@@ -280,9 +326,32 @@
 <div class="masthead">
   <div class="masthead-inner">
     <div class="eyebrow">Solo Queue &middot; Scouting Report</div>
-    <h1 id="hdr-title">river3 &mdash; Bot Lane</h1>
-    <p class="sub" id="hdr-sub">Loading&hellip;</p>
+    <h1 id="hdr-title">Loading&hellip;</h1>
+    <p class="sub" id="hdr-sub">&nbsp;</p>
     <div class="kpi-row" id="kpi-row"></div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-field">
+    <label for="filter-window">Game window</label>
+    <select id="filter-window">
+      <option value="20">Last 20 games</option>
+      <option value="50">Last 50 games</option>
+      <option value="0" selected>All time</option>
+    </select>
+  </div>
+  <div class="filter-field">
+    <label for="filter-role">Role</label>
+    <select id="filter-role"></select>
+  </div>
+  <div class="filter-field">
+    <label for="filter-tier">Compare vs.</label>
+    <select id="filter-tier"></select>
+  </div>
+  <div class="filter-field">
+    <label for="filter-k">Playstyles (k)</label>
+    <select id="filter-k"></select>
   </div>
 </div>
 
@@ -290,14 +359,14 @@
 
   <section id="section-percentiles">
     <div class="section-head">
-      <div class="eyebrow">vs. Challenger</div>
+      <div class="eyebrow">vs. reference tier</div>
       <h2>How you compare</h2>
-      <p>Your Bot lane average against Challenger-tier Bot laners, by performance percentile. Right = outperforming Challenger; left = underperforming. For stats where a lower raw value is better (deaths, damage taken), the percentile is flipped so the direction always means the same thing.</p>
+      <p id="percentiles-sub">Your average against the reference tier, by performance percentile. Right = outperforming; left = underperforming. For stats where a lower raw value is better (deaths, damage taken), the percentile is flipped so direction always means the same thing.</p>
     </div>
     <div class="panel">
       <div class="legend-row">
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Outperforming Challenger</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Underperforming Challenger</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Outperforming</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Underperforming</span>
       </div>
       <div class="divbars" id="divbars"></div>
     </div>
@@ -306,8 +375,8 @@
   <section id="section-archetypes">
     <div class="section-head">
       <div class="eyebrow">Playstyle clustering</div>
-      <h2>Your Bot lane archetypes</h2>
-      <p>KMeans clusters fit on Diamond&ndash;Challenger Bot laners. Each card shows the population win rate for that archetype and how many of your last games landed in it.</p>
+      <h2 id="archetypes-heading">Your archetypes</h2>
+      <p id="archetypes-sub">KMeans clusters fit on the full training population for this role. Each card shows the population win rate for that archetype and how many of your games in the current window landed in it.</p>
     </div>
     <div class="card-grid" id="card-grid"></div>
   </section>
@@ -316,7 +385,7 @@
     <div class="section-head">
       <div class="eyebrow">Cluster space</div>
       <h2>Where your games land</h2>
-      <p>A 2D projection (first two PCA components) of the Bot lane population, sampled, with your games plotted on top. Filled = win, ringed = loss.</p>
+      <p>A 2D projection (first two PCA components) of the role population, sampled, with your games in the current window plotted on top. Filled = win, ringed = loss.</p>
     </div>
     <div class="panel scatter-panel">
       <svg id="scatter" class="scatter-svg" viewBox="0 0 760 440" preserveAspectRatio="xMidYMid meet"></svg>
@@ -327,7 +396,7 @@
     <div class="section-head">
       <div class="eyebrow">Match log</div>
       <h2 id="games-heading">Ranked games</h2>
-      <p id="games-sub">Most recent first. Archetype is only assigned for the role the clustering above supports.</p>
+      <p id="games-sub">Most recent first, across all roles in the current game window. Archetype is only assigned for the selected role.</p>
     </div>
     <div class="panel table-wrap">
       <table class="games" id="games-table">
@@ -345,8 +414,8 @@
 
   <footer>
     Data via the Riot Games API, aggregated across Diamond, Master, Grandmaster, and Challenger solo queue. Clustering is
-    fit per role (StandardScaler &rarr; PCA &rarr; KMeans) on match aggregate stats. This is a static snapshot &mdash;
-    re-export after fetching new games to refresh.
+    fit per role (StandardScaler &rarr; PCA &rarr; KMeans) on match aggregate stats; the cluster-count slider refits KMeans
+    on the same PCA space for k = 3&ndash;6. This is a static snapshot &mdash; re-export after fetching new games to refresh.
   </footer>
 </div>
 
@@ -356,14 +425,10 @@
 <script>
 (function () {
   var DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+  var ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+  var SLOTS = ['var(--slot-0)', 'var(--slot-1)', 'var(--slot-2)', 'var(--slot-3)', 'var(--slot-4)', 'var(--slot-5)'];
 
-  var slotForRank = { 0: 'var(--slot-low)', 1: 'var(--slot-mid)', 2: 'var(--slot-high)' };
-  var nameForCluster = {};
-  var colorForCluster = {};
-  DATA.clusters.slice().sort(function (a, b) { return a.win_rate - b.win_rate; }).forEach(function (c, rank) {
-    nameForCluster[c.cluster] = c.name;
-    colorForCluster[c.cluster] = slotForRank[rank] || 'var(--ink-muted)';
-  });
+  document.title = 'River3 Scouting Report';
 
   var tooltip = document.getElementById('tooltip');
   function showTooltip(evt, html) {
@@ -383,202 +448,386 @@
     return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   }
   function pct(n) { return Math.round(n) + '%'; }
+  function titleCase(s) { return s.charAt(0) + s.slice(1).toLowerCase(); }
 
-  // ---------- Header ----------
-  document.getElementById('hdr-title').textContent = DATA.riot_id + ' — ' + titleCase(DATA.focus_role) + ' Lane';
-  document.title = 'River3 Scouting Report';
-  var roleEntries = Object.keys(DATA.role_counts).map(function (r) { return r + ' ×' + DATA.role_counts[r]; }).join('   ·   ');
-  document.getElementById('hdr-sub').textContent =
-    'All ' + DATA.record.total_games + ' ranked games on record. ' + roleEntries + '.';
-  document.getElementById('games-heading').textContent = 'All ' + DATA.record.total_games + ' ranked games';
-  document.getElementById('games-sub').textContent =
-    'Most recent first. Archetype is only assigned for ' + titleCase(DATA.focus_role) + ' lane, the role the clustering above supports.';
-
-  function titleCase(s) {
-    return s.charAt(0) + s.slice(1).toLowerCase();
+  function percentileFromBreakpoints(value, breakpoints) {
+    var n = breakpoints.length;
+    if (value <= breakpoints[0]) return 0;
+    if (value >= breakpoints[n - 1]) return 100;
+    var step = 100 / (n - 1);
+    for (var i = 0; i < n - 1; i++) {
+      if (value <= breakpoints[i + 1]) {
+        var lo = breakpoints[i], hi = breakpoints[i + 1];
+        var frac = hi > lo ? (value - lo) / (hi - lo) : 0;
+        return (i + frac) * step;
+      }
+    }
+    return 100;
   }
 
-  var kpiRow = document.getElementById('kpi-row');
-  var kpis = [
-    { label: 'Record', value: DATA.record.wins + 'W – ' + DATA.record.losses + 'L', foot: 'last ' + DATA.record.total_games + ' games' },
-    { label: 'Win rate', value: pct(DATA.record.win_rate * 100), foot: DATA.record.win_rate >= 0.5 ? 'above 50%' : 'below 50%', good: DATA.record.win_rate >= 0.5 },
-    { label: 'Primary role', value: titleCase(DATA.focus_role), foot: DATA.role_counts[DATA.focus_role] + ' of ' + DATA.record.total_games + ' games' },
-    { label: 'Reference tier', value: DATA.reference_tier.charAt(0) + DATA.reference_tier.slice(1).toLowerCase(), foot: 'comparison baseline' }
-  ];
-  kpis.forEach(function (k) {
-    var el = document.createElement('div');
-    el.className = 'kpi';
-    el.innerHTML =
-      '<div class="label">' + k.label + '</div>' +
-      '<div class="value' + (k.good ? ' good' : '') + '">' + k.value + '</div>' +
-      '<div class="foot">' + k.foot + '</div>';
-    kpiRow.appendChild(el);
+  function mean(values) {
+    var filtered = values.filter(function (v) { return v !== null && v !== undefined && !isNaN(v); });
+    if (!filtered.length) return null;
+    return filtered.reduce(function (a, b) { return a + b; }, 0) / filtered.length;
+  }
+
+  // ---------- Populate filter selects ----------
+  var roleSelect = document.getElementById('filter-role');
+  ROLE_ORDER.filter(function (r) { return DATA.roles[r]; }).forEach(function (role) {
+    var opt = document.createElement('option');
+    opt.value = role;
+    opt.textContent = titleCase(role) + (DATA.role_counts[role] ? ' (' + DATA.role_counts[role] + ' games)' : ' (0 games)');
+    roleSelect.appendChild(opt);
   });
+  var defaultRole = ROLE_ORDER.reduce(function (best, r) {
+    return (DATA.role_counts[r] || 0) > (DATA.role_counts[best] || 0) ? r : best;
+  }, ROLE_ORDER[0]);
+  roleSelect.value = defaultRole;
+
+  var kSelect = document.getElementById('filter-k');
+  DATA.k_options.forEach(function (k) {
+    var opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = k + ' clusters';
+    kSelect.appendChild(opt);
+  });
+
+  var tierSelect = document.getElementById('filter-tier');
+  function refreshTierOptions() {
+    var role = roleSelect.value;
+    var previous = tierSelect.value;
+    tierSelect.innerHTML = '';
+    var available = DATA.tiers.filter(function (t) { return DATA.reference[role] && DATA.reference[role][t]; });
+    available.forEach(function (tier) {
+      var opt = document.createElement('option');
+      opt.value = tier;
+      opt.textContent = titleCase(tier);
+      tierSelect.appendChild(opt);
+    });
+    if (available.indexOf(previous) !== -1) {
+      tierSelect.value = previous;
+    } else if (available.indexOf('CHALLENGER') !== -1) {
+      tierSelect.value = 'CHALLENGER';
+    }
+  }
+  refreshTierOptions();
+
+  [document.getElementById('filter-window'), roleSelect, tierSelect, kSelect].forEach(function (el) {
+    el.addEventListener('change', function () {
+      if (el === roleSelect) refreshTierOptions();
+      renderAll();
+    });
+  });
+
+  // ---------- Header (static parts) ----------
+  document.getElementById('hdr-title').textContent = DATA.riot_id + ' — Scouting Report';
+
+  function currentFilters() {
+    return {
+      windowSize: parseInt(document.getElementById('filter-window').value, 10),
+      role: roleSelect.value,
+      tier: tierSelect.value,
+      k: kSelect.value
+    };
+  }
+
+  function windowedGames(windowSize) {
+    return windowSize > 0 ? DATA.games.slice(0, windowSize) : DATA.games;
+  }
+
+  function renderHeader(filters, windowGames) {
+    var wins = windowGames.filter(function (g) { return g.win; }).length;
+    var losses = windowGames.length - wins;
+    var winRate = windowGames.length ? wins / windowGames.length : 0;
+    var roleGamesInWindow = windowGames.filter(function (g) { return g.role === filters.role; }).length;
+
+    document.getElementById('hdr-sub').textContent =
+      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games on record.';
+
+    var kpis = [
+      { label: 'Record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
+      { label: 'Win rate', value: pct(winRate * 100), foot: winRate >= 0.5 ? 'above 50%' : 'below 50%', good: winRate >= 0.5 },
+      { label: 'Selected role', value: titleCase(filters.role), foot: roleGamesInWindow + ' of ' + windowGames.length + ' games' },
+      { label: 'Comparing vs.', value: filters.tier ? titleCase(filters.tier) : '—', foot: 'reference tier' }
+    ];
+    var kpiRow = document.getElementById('kpi-row');
+    kpiRow.innerHTML = '';
+    kpis.forEach(function (k) {
+      var el = document.createElement('div');
+      el.className = 'kpi';
+      el.innerHTML =
+        '<div class="label">' + k.label + '</div>' +
+        '<div class="value' + (k.good ? ' good' : '') + '">' + k.value + '</div>' +
+        '<div class="foot">' + k.foot + '</div>';
+      kpiRow.appendChild(el);
+    });
+
+    document.getElementById('games-heading').textContent =
+      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games';
+  }
 
   // ---------- Diverging bar chart ----------
-  var divbars = document.getElementById('divbars');
-  DATA.headline_features.forEach(function (f) {
-    var delta = f.percentile - 50;
-    var widthPct = (Math.abs(delta) / 50) * 100; // 0..100 relative to half-track
-    var row = document.createElement('div');
-    row.className = 'divbar-row';
+  function renderPercentiles(filters, roleGames) {
+    var container = document.getElementById('divbars');
+    container.innerHTML = '';
+    var refForRoleTier = DATA.reference[filters.role] && DATA.reference[filters.role][filters.tier];
 
-    var label = document.createElement('div');
-    label.className = 'divbar-label';
-    label.textContent = f.label;
+    document.getElementById('percentiles-sub').textContent =
+      'Your ' + titleCase(filters.role) + ' average in the current window against ' + titleCase(filters.tier || '—') +
+      ' ' + titleCase(filters.role) + ' players, by performance percentile.';
 
-    var track = document.createElement('div');
-    track.className = 'divbar-track';
-    var axis = document.createElement('div');
-    axis.className = 'divbar-axis';
-    var fillBar = document.createElement('div');
-    fillBar.className = 'divbar-fill ' + (delta >= 0 ? 'pos' : 'neg');
-    fillBar.style.width = 'calc(' + widthPct + '% * 0.5)';
-    fillBar.tabIndex = 0;
-    fillBar.addEventListener('pointerenter', function (e) {
-      showTooltip(e,
+    if (!roleGames.length) {
+      container.innerHTML = '<div class="empty-state">No ' + titleCase(filters.role) + ' games in this window.</div>';
+      return;
+    }
+    if (!refForRoleTier) {
+      container.innerHTML = '<div class="empty-state">Not enough ' + titleCase(filters.tier || '') + ' ' + titleCase(filters.role) + ' data to compare against yet.</div>';
+      return;
+    }
+
+    DATA.headline_features.forEach(function (f) {
+      var curve = refForRoleTier[f.feature];
+      if (!curve) return;
+      var yourAvg = mean(roleGames.map(function (g) { return g.features[f.feature]; }));
+      if (yourAvg === null) return;
+
+      var rawPercentile = percentileFromBreakpoints(yourAvg, curve.breakpoints);
+      var displayPercentile = f.invert ? 100 - rawPercentile : rawPercentile;
+      var delta = displayPercentile - 50;
+      var widthPct = (Math.abs(delta) / 50) * 100;
+
+      var row = document.createElement('div');
+      row.className = 'divbar-row';
+
+      var label = document.createElement('div');
+      label.className = 'divbar-label';
+      label.textContent = f.label;
+
+      var track = document.createElement('div');
+      track.className = 'divbar-track';
+      var axis = document.createElement('div');
+      axis.className = 'divbar-axis';
+      var fillBar = document.createElement('div');
+      fillBar.className = 'divbar-fill ' + (delta >= 0 ? 'pos' : 'neg');
+      fillBar.style.width = 'calc(' + widthPct + '% * 0.5)';
+      fillBar.tabIndex = 0;
+
+      var tooltipHtml =
         '<div class="tt-title">' + f.label + '</div>' +
-        '<div class="tt-row"><span>You</span><strong>' + fmt(f.your_avg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>Challenger avg</span><strong>' + fmt(f.ref_avg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(f.percentile, 0) + '</strong></div>'
-      );
+        '<div class="tt-row"><span>You</span><strong>' + fmt(yourAvg, 2) + '</strong></div>' +
+        '<div class="tt-row"><span>' + titleCase(filters.tier) + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
+        '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(displayPercentile, 0) + '</strong></div>';
+
+      fillBar.addEventListener('pointerenter', function (e) { showTooltip(e, tooltipHtml); });
+      fillBar.addEventListener('pointermove', moveTooltip);
+      fillBar.addEventListener('pointerleave', hideTooltip);
+      fillBar.addEventListener('focus', function (e) { showTooltip(e, tooltipHtml); });
+      fillBar.addEventListener('blur', hideTooltip);
+
+      track.appendChild(axis);
+      track.appendChild(fillBar);
+
+      var value = document.createElement('div');
+      value.className = 'divbar-value mono tabular';
+      value.innerHTML = (delta >= 0 ? '<span class="sign">+</span>' : '<span class="sign">−</span>') + Math.round(Math.abs(delta));
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(value);
+      container.appendChild(row);
     });
-    fillBar.addEventListener('pointermove', moveTooltip);
-    fillBar.addEventListener('pointerleave', hideTooltip);
-    fillBar.addEventListener('focus', function (e) { showTooltip(e, f.label + ': ' + fmt(f.percentile, 0) + 'th performance percentile'); });
-    fillBar.addEventListener('blur', hideTooltip);
-
-    track.appendChild(axis);
-    track.appendChild(fillBar);
-
-    var value = document.createElement('div');
-    value.className = 'divbar-value mono tabular';
-    value.innerHTML = (delta >= 0 ? '<span class="sign">+</span>' : '<span class="sign">−</span>') + Math.round(Math.abs(delta));
-
-    row.appendChild(label);
-    row.appendChild(track);
-    row.appendChild(value);
-    divbars.appendChild(row);
-  });
+  }
 
   // ---------- Archetype cards ----------
-  var cardGrid = document.getElementById('card-grid');
-  var descByName = {
-    'Passive & Behind': 'Low damage and kill participation — games where the lane fell behind early and stayed there.',
-    'Sustain Skirmisher': 'Moderate damage with strong healing/shielding output — trading and skirmishing rather than pure scaling.',
-    'Snowballing Carry': 'High damage, gold, and objective participation — games taken over as the primary win condition.',
-    'High-Variance Carry': 'Highest-swing profile in the population — big upside, big downside.'
+  var descByRankName = {
+    'Passive & Behind': 'Lowest win rate of the group — games that fell behind early and stayed there.',
+    'Under Pressure': 'Below-average impact — struggling to convert lane state into game state.',
+    'Sustain Skirmisher': 'Middling win rate with a sustain/utility lean — trading rather than snowballing.',
+    'Balanced Contributor': 'Solid all-around win rate without one dominant statistical signature.',
+    'Snowballing Carry': 'High win rate driven by damage, gold, and objective participation.',
+    'Dominant Carry': 'Highest win rate of the group — the clearest "carried the game" profile.'
   };
-  var sortedClusters = DATA.clusters.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
-  var maxWinRate = Math.max.apply(null, DATA.clusters.map(function (c) { return c.win_rate; }));
-  sortedClusters.forEach(function (c, rank) {
-    var color = slotForRank[rank] || 'var(--ink-muted)';
-    var yourShare = DATA.role_counts[DATA.focus_role] ? Math.round((c.your_count / DATA.role_counts[DATA.focus_role]) * 100) : 0;
-    var card = document.createElement('div');
-    card.className = 'panel arch-card';
-    card.innerHTML =
-      '<h3><span class="dot" style="background:' + color + '"></span>' + c.name + '</h3>' +
-      '<div class="desc">' + (descByName[c.name] || '') + '</div>' +
-      '<div class="meter-label"><span>Population win rate</span><span class="mono tabular">' + pct(c.win_rate * 100) + '</span></div>' +
-      '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate / maxWinRate * 100) + ';background:' + color + '"></div></div>' +
-      '<div class="arch-stat"><span class="n mono">' + c.your_count + '</span><span class="of">of your ' + DATA.role_counts[DATA.focus_role] + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>';
-    cardGrid.appendChild(card);
-  });
+
+  function renderArchetypes(filters, roleGames) {
+    var grid = document.getElementById('card-grid');
+    grid.innerHTML = '';
+    document.getElementById('archetypes-heading').textContent = titleCase(filters.role) + ' archetypes';
+
+    var roleData = DATA.roles[filters.role];
+    var kData = roleData && roleData.clusters_by_k[filters.k];
+    if (!kData) {
+      grid.innerHTML = '<div class="empty-state">No cluster data for this role/k combination.</div>';
+      return;
+    }
+
+    var yourCounts = {};
+    roleGames.forEach(function (g) {
+      var c = g.clusterByK[filters.k];
+      if (c !== undefined) yourCounts[c] = (yourCounts[c] || 0) + 1;
+    });
+
+    var sorted = kData.summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
+    var maxWinRate = Math.max.apply(null, kData.summary.map(function (c) { return c.win_rate; }));
+
+    sorted.forEach(function (c, rank) {
+      var color = SLOTS[rank % SLOTS.length];
+      var yourCount = yourCounts[c.cluster] || 0;
+      var yourShare = roleGames.length ? Math.round((yourCount / roleGames.length) * 100) : 0;
+      var card = document.createElement('div');
+      card.className = 'panel arch-card';
+      card.innerHTML =
+        '<h3><span class="dot" style="background:' + color + '"></span>' + c.name + '</h3>' +
+        '<div class="desc" style="font-size:13px;color:var(--ink-2);margin-top:8px;">' + (descByRankName[c.name] || '') + '</div>' +
+        '<div class="meter-label"><span>Population win rate</span><span class="mono tabular">' + pct(c.win_rate * 100) + '</span></div>' +
+        '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate / maxWinRate * 100) + ';background:' + color + '"></div></div>' +
+        '<div class="arch-stat"><span class="n mono">' + yourCount + '</span><span class="of">of your ' + roleGames.length + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>';
+      grid.appendChild(card);
+    });
+  }
 
   // ---------- Scatter ----------
   var svgNS = 'http://www.w3.org/2000/svg';
   var svg = document.getElementById('scatter');
   var W = 760, H = 440, PAD = 24;
-  var allX = DATA.scatter.population.map(function (p) { return p.x; }).concat(DATA.scatter.mine.map(function (p) { return p.x; }));
-  var allY = DATA.scatter.population.map(function (p) { return p.y; }).concat(DATA.scatter.mine.map(function (p) { return p.y; }));
-  var xMin = Math.min.apply(null, allX), xMax = Math.max.apply(null, allX);
-  var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
-  function sx(x) { return PAD + (x - xMin) / (xMax - xMin) * (W - 2 * PAD); }
-  function sy(y) { return H - PAD - (y - yMin) / (yMax - yMin) * (H - 2 * PAD); }
 
-  DATA.scatter.population.forEach(function (p) {
-    var c = document.createElementNS(svgNS, 'circle');
-    c.setAttribute('cx', sx(p.x)); c.setAttribute('cy', sy(p.y)); c.setAttribute('r', 2.6);
-    c.setAttribute('class', 'scatter-pop');
-    svg.appendChild(c);
-  });
+  function rankColorMap(summary) {
+    var sorted = summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
+    var map = {};
+    sorted.forEach(function (c, rank) { map[c.cluster] = { color: SLOTS[rank % SLOTS.length], name: c.name }; });
+    return map;
+  }
 
-  DATA.scatter.mine.forEach(function (p) {
-    var color = colorForCluster[p.cluster] || 'var(--ink)';
-    var g = document.createElementNS(svgNS, 'g');
-    g.setAttribute('class', 'scatter-mine');
+  function renderScatter(filters, roleGames) {
+    svg.innerHTML = '';
+    var roleData = DATA.roles[filters.role];
+    var kData = roleData && roleData.clusters_by_k[filters.k];
+    if (!roleData || !kData) return;
 
-    var mark = document.createElementNS(svgNS, 'circle');
-    mark.setAttribute('cx', sx(p.x)); mark.setAttribute('cy', sy(p.y)); mark.setAttribute('r', 6);
-    mark.setAttribute('fill', p.win ? color : 'var(--surface)');
-    mark.setAttribute('stroke', color);
-    mark.setAttribute('stroke-width', 2.2);
+    var popX = roleData.population_scatter.x, popY = roleData.population_scatter.y;
+    var popLabels = kData.sample_labels;
+    var colorMap = rankColorMap(kData.summary);
 
-    var hit = document.createElementNS(svgNS, 'circle');
-    hit.setAttribute('cx', sx(p.x)); hit.setAttribute('cy', sy(p.y)); hit.setAttribute('r', 13);
-    hit.setAttribute('class', 'hit');
+    var mineXY = roleGames.filter(function (g) { return g.scatterXY; });
 
-    g.appendChild(mark);
-    g.appendChild(hit);
+    var allX = popX.concat(mineXY.map(function (g) { return g.scatterXY[0]; }));
+    var allY = popY.concat(mineXY.map(function (g) { return g.scatterXY[1]; }));
+    if (!allX.length) return;
+    var xMin = Math.min.apply(null, allX), xMax = Math.max.apply(null, allX);
+    var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
+    function sx(x) { return PAD + (x - xMin) / (xMax - xMin) * (W - 2 * PAD); }
+    function sy(y) { return H - PAD - (y - yMin) / (yMax - yMin) * (H - 2 * PAD); }
 
-    g.addEventListener('pointerenter', function (e) {
-      showTooltip(e,
-        '<div class="tt-title">' + p.champion + '</div>' +
-        '<div class="tt-row"><span>Result</span><strong>' + (p.win ? 'Win' : 'Loss') + '</strong></div>' +
-        '<div class="tt-row"><span>Archetype</span><strong>' + (nameForCluster[p.cluster] || '—') + '</strong></div>'
-      );
-    });
-    g.addEventListener('pointermove', moveTooltip);
-    g.addEventListener('pointerleave', hideTooltip);
-    svg.appendChild(g);
-  });
-
-  // ---------- Games table ----------
-  var tbody = document.getElementById('games-tbody');
-  DATA.games.forEach(function (g) {
-    var tr = document.createElement('tr');
-
-    var tdResult = document.createElement('td');
-    var pill = document.createElement('span');
-    pill.className = 'pill ' + (g.win ? 'win' : 'loss');
-    pill.textContent = g.win ? 'Win' : 'Loss';
-    tdResult.appendChild(pill);
-
-    var tdChamp = document.createElement('td');
-    tdChamp.textContent = g.champion;
-
-    var tdRole = document.createElement('td');
-    tdRole.textContent = titleCase(g.role);
-
-    var tdKda = document.createElement('td'); tdKda.className = 'num'; tdKda.textContent = fmt(g.kda, 2);
-    var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.cs_per_min, 1);
-    var tdDmg = document.createElement('td'); tdDmg.className = 'num'; tdDmg.textContent = fmt(g.damage_per_minute, 0);
-    var tdVis = document.createElement('td'); tdVis.className = 'num'; tdVis.textContent = fmt(g.vision_score_per_minute, 2);
-
-    var tdArch = document.createElement('td');
-    if (g.cluster !== null && g.cluster !== undefined) {
-      var chip = document.createElement('span');
-      chip.className = 'arch-chip';
-      var dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = colorForCluster[g.cluster] || 'var(--ink-muted)';
-      chip.appendChild(dot);
-      chip.appendChild(document.createTextNode(nameForCluster[g.cluster] || '—'));
-      tdArch.appendChild(chip);
-    } else {
-      tdArch.textContent = '—';
-      tdArch.style.color = 'var(--ink-muted)';
+    for (var i = 0; i < popX.length; i++) {
+      var c = document.createElementNS(svgNS, 'circle');
+      c.setAttribute('cx', sx(popX[i])); c.setAttribute('cy', sy(popY[i])); c.setAttribute('r', 2.6);
+      c.setAttribute('class', 'scatter-pop');
+      svg.appendChild(c);
     }
 
-    tr.appendChild(tdResult);
-    tr.appendChild(tdChamp);
-    tr.appendChild(tdRole);
-    tr.appendChild(tdKda);
-    tr.appendChild(tdCs);
-    tr.appendChild(tdDmg);
-    tr.appendChild(tdVis);
-    tr.appendChild(tdArch);
-    tbody.appendChild(tr);
-  });
+    mineXY.forEach(function (g) {
+      var clusterId = g.clusterByK[filters.k];
+      var info = colorMap[clusterId] || { color: 'var(--ink)', name: '—' };
+      var gEl = document.createElementNS(svgNS, 'g');
+      gEl.setAttribute('class', 'scatter-mine');
+
+      var mark = document.createElementNS(svgNS, 'circle');
+      mark.setAttribute('cx', sx(g.scatterXY[0])); mark.setAttribute('cy', sy(g.scatterXY[1])); mark.setAttribute('r', 6);
+      mark.setAttribute('fill', g.win ? info.color : 'var(--surface)');
+      mark.setAttribute('stroke', info.color);
+      mark.setAttribute('stroke-width', 2.2);
+
+      var hit = document.createElementNS(svgNS, 'circle');
+      hit.setAttribute('cx', sx(g.scatterXY[0])); hit.setAttribute('cy', sy(g.scatterXY[1])); hit.setAttribute('r', 13);
+      hit.setAttribute('class', 'hit');
+
+      gEl.appendChild(mark);
+      gEl.appendChild(hit);
+
+      gEl.addEventListener('pointerenter', function (e) {
+        showTooltip(e,
+          '<div class="tt-title">' + g.champion + '</div>' +
+          '<div class="tt-row"><span>Result</span><strong>' + (g.win ? 'Win' : 'Loss') + '</strong></div>' +
+          '<div class="tt-row"><span>Archetype</span><strong>' + info.name + '</strong></div>'
+        );
+      });
+      gEl.addEventListener('pointermove', moveTooltip);
+      gEl.addEventListener('pointerleave', hideTooltip);
+      svg.appendChild(gEl);
+    });
+  }
+
+  // ---------- Games table ----------
+  function renderTable(filters, windowGames) {
+    document.getElementById('games-sub').textContent =
+      'Most recent first, across all roles in the current game window. Archetype shown for ' + titleCase(filters.role) + ' games (k=' + filters.k + ').';
+
+    var tbody = document.getElementById('games-tbody');
+    tbody.innerHTML = '';
+
+    var roleData = DATA.roles[filters.role];
+    var kData = roleData && roleData.clusters_by_k[filters.k];
+    var colorMap = kData ? rankColorMap(kData.summary) : {};
+
+    windowGames.forEach(function (g) {
+      var tr = document.createElement('tr');
+
+      var tdResult = document.createElement('td');
+      var pill = document.createElement('span');
+      pill.className = 'pill ' + (g.win ? 'win' : 'loss');
+      pill.textContent = g.win ? 'Win' : 'Loss';
+      tdResult.appendChild(pill);
+
+      var tdChamp = document.createElement('td');
+      tdChamp.textContent = g.champion;
+
+      var tdRole = document.createElement('td');
+      tdRole.textContent = titleCase(g.role);
+
+      var tdKda = document.createElement('td'); tdKda.className = 'num'; tdKda.textContent = fmt(g.features.kda, 2);
+      var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.features.cs_per_min, 1);
+      var tdDmg = document.createElement('td'); tdDmg.className = 'num'; tdDmg.textContent = fmt(g.features.damage_per_minute, 0);
+      var tdVis = document.createElement('td'); tdVis.className = 'num'; tdVis.textContent = fmt(g.features.vision_score_per_minute, 2);
+
+      var tdArch = document.createElement('td');
+      var clusterId = g.role === filters.role ? g.clusterByK[filters.k] : undefined;
+      if (clusterId !== undefined && colorMap[clusterId]) {
+        var chip = document.createElement('span');
+        chip.className = 'arch-chip';
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = colorMap[clusterId].color;
+        chip.appendChild(dot);
+        chip.appendChild(document.createTextNode(colorMap[clusterId].name));
+        tdArch.appendChild(chip);
+      } else {
+        tdArch.textContent = '—';
+        tdArch.style.color = 'var(--ink-muted)';
+      }
+
+      tr.appendChild(tdResult);
+      tr.appendChild(tdChamp);
+      tr.appendChild(tdRole);
+      tr.appendChild(tdKda);
+      tr.appendChild(tdCs);
+      tr.appendChild(tdDmg);
+      tr.appendChild(tdVis);
+      tr.appendChild(tdArch);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderAll() {
+    var filters = currentFilters();
+    var windowGames = windowedGames(filters.windowSize);
+    var roleGames = windowGames.filter(function (g) { return g.role === filters.role; });
+
+    renderHeader(filters, windowGames);
+    renderPercentiles(filters, roleGames);
+    renderArchetypes(filters, roleGames);
+    renderScatter(filters, roleGames);
+    renderTable(filters, windowGames);
+  }
+
+  renderAll();
 })();
 </script>

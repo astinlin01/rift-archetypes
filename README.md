@@ -121,7 +121,9 @@ sync with the scripts automatically rather than duplicating logic.
 - **notebooks/03_generate_dashboard.ipynb** -- runs `export_dashboard_data.py` + `build_dashboard.py` and sanity-checks the result. Publishing the output as a Claude Artifact still has to happen from a Claude Code conversation.
 
 ### src/export_dashboard_data.py + src/build_dashboard.py
-Builds a self-contained HTML "scouting report" dashboard for one player -- percentile comparison vs. a reference tier, cluster archetype cards, a PCA scatter with your games highlighted, and a recent-games table. `export_dashboard_data.py` writes `data/processed/dashboard_data.json`; `build_dashboard.py` merges it into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.
+Builds a self-contained, **interactive** HTML "scouting report" dashboard for one player. `export_dashboard_data.py` precomputes everything up front for every role, every reference tier, and cluster counts k=3-6 (percentile reference curves, PCA scatter positions, per-k cluster assignments for every game), so the published dashboard can filter by game window (last 20 / last 50 / all time), role, reference tier, and cluster count entirely client-side with no server round trip. `build_dashboard.py` merges the resulting `data/processed/dashboard_data.json` into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.
+
+Note: cluster counts here are fit fresh per k on the same per-role PCA space purely for the dashboard's slider -- they don't change or replace the "official" per-role models in `models/` that `compare_self.py` uses (those keep whatever k `build_clusters.py`'s silhouette search picked).
 
 - Run: `python src/export_dashboard_data.py --riot-id "river3#na1"` then `python src/build_dashboard.py`
 
@@ -133,8 +135,11 @@ Builds a self-contained HTML "scouting report" dashboard for one player -- perce
 - `python src/fetch_league_pool.py --tier GRANDMASTER --output-path data/raw/league_entries_grandmaster.json`
 - `python src/fetch_league_pool.py --tier CHALLENGER --output-path data/raw/league_entries_challenger.json`
 
-2. Collect match IDs
+2. Collect match IDs (once per tier file -- `fetch_match_ids.py` only reads one `--league-entries-path` per run; add `--skip-default-riot-ids` on the non-Diamond runs to avoid redundantly re-resolving your own accounts each time). Master/Grandmaster pools can be huge (Master was 10,000 players on NA1) -- cap with `--max-players` to keep runtime and dataset size proportionate to the other tiers.
 - `python src/fetch_match_ids.py --resume`
+- `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_master.json --max-players 300 --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_master_checkpoint.json`
+- `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_grandmaster.json --max-players 300 --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_gm_checkpoint.json`
+- `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_challenger.json --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_challenger_checkpoint.json`
 
 3. Fetch match payloads
 - `python src/fetch_match_details.py --resume`
