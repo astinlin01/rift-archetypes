@@ -66,6 +66,11 @@ Outputs:
 - `data/raw/checkpoints/match_details_checkpoint.json`
 - `data/raw/failures/match_details_failures.ndjson`
 
+### src/fetch_recent_self.py
+Pulls your own most recent ranked matches directly (resolve Riot ID -> recent match IDs -> match details) without scanning the full league pool. Appends into the same `match_ids.ndjson`/`matches.ndjson` files, so a normal `build_features.py` run picks the new games up.
+
+- Run: `python src/fetch_recent_self.py --riot-id "river3#na1" --count 20`
+
 ### src/eda_overview.py
 Profiles the collected JSON/NDJSON files and writes a markdown schema and descriptive-statistics report.
 
