@@ -292,13 +292,12 @@
     <div class="section-head">
       <div class="eyebrow">vs. Challenger</div>
       <h2>How you compare</h2>
-      <p>Your Bot lane average against Challenger-tier Bot laners, by percentile. Right of center is above the Challenger average; left is below.</p>
+      <p>Your Bot lane average against Challenger-tier Bot laners, by performance percentile. Right = outperforming Challenger; left = underperforming. For stats where a lower raw value is better (deaths, damage taken), the percentile is flipped so the direction always means the same thing.</p>
     </div>
     <div class="panel">
       <div class="legend-row">
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Above Challenger avg</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Below Challenger avg</span>
-        <span class="legend-item">† lower is typically better for this stat</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Outperforming Challenger</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Underperforming Challenger</span>
       </div>
       <div class="divbars" id="divbars"></div>
     </div>
@@ -415,7 +414,6 @@
 
   // ---------- Diverging bar chart ----------
   var divbars = document.getElementById('divbars');
-  var maxAbsDelta = Math.max.apply(null, DATA.headline_features.map(function (f) { return Math.abs(f.percentile - 50); }));
   DATA.headline_features.forEach(function (f) {
     var delta = f.percentile - 50;
     var widthPct = (Math.abs(delta) / 50) * 100; // 0..100 relative to half-track
@@ -424,7 +422,7 @@
 
     var label = document.createElement('div');
     label.className = 'divbar-label';
-    label.textContent = f.label + (f.invert ? ' †' : '');
+    label.textContent = f.label;
 
     var track = document.createElement('div');
     track.className = 'divbar-track';
@@ -439,12 +437,12 @@
         '<div class="tt-title">' + f.label + '</div>' +
         '<div class="tt-row"><span>You</span><strong>' + fmt(f.your_avg, 2) + '</strong></div>' +
         '<div class="tt-row"><span>Challenger avg</span><strong>' + fmt(f.ref_avg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>Percentile</span><strong>' + fmt(f.percentile, 0) + '</strong></div>'
+        '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(f.percentile, 0) + '</strong></div>'
       );
     });
     fillBar.addEventListener('pointermove', moveTooltip);
     fillBar.addEventListener('pointerleave', hideTooltip);
-    fillBar.addEventListener('focus', function (e) { showTooltip(e, f.label + ': ' + fmt(f.percentile, 0) + 'th percentile'); });
+    fillBar.addEventListener('focus', function (e) { showTooltip(e, f.label + ': ' + fmt(f.percentile, 0) + 'th performance percentile'); });
     fillBar.addEventListener('blur', hideTooltip);
 
     track.appendChild(axis);

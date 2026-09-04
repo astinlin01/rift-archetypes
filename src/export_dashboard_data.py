@@ -33,7 +33,7 @@ HEADLINE_FEATURES = [
     ("kill_participation", "Kill participation", False),
     ("team_damage_pct", "Team damage share", False),
     ("cs_per_min", "CS / min", False),
-    ("cc_time_per_min", "CC time / min", False),
+    ("cc_time_per_min", "CC time on enemies / min", False),
     ("damage_taken_per_min", "Damage taken / min", True),
     ("control_wards_per_min", "Control wards / min", False),
     ("deaths_per_min", "Deaths / min", True),
@@ -171,13 +171,19 @@ def run(args: argparse.Namespace) -> None:
             from scipy.stats import percentileofscore
 
             percentile = float(percentileofscore(ref_series, your_avg, kind="mean"))
+
+        # For "lower raw value is the better outcome" stats (deaths, damage taken),
+        # flip the percentile so the dashboard's polarity always means the same
+        # thing: right/positive = performing well, left/negative = performing poorly.
+        performance_percentile = (100.0 - percentile) if invert else percentile
+
         headline_rows.append(
             {
                 "feature": column,
                 "label": label,
                 "your_avg": round(your_avg, 3),
                 "ref_avg": round(ref_avg, 3),
-                "percentile": round(percentile, 1),
+                "percentile": round(performance_percentile, 1),
                 "invert": invert,
             }
         )
