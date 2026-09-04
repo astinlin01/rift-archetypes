@@ -13,7 +13,7 @@ role, reference tier, and cluster count entirely client-side with no
 server/recompute step.
 
 Run from repo root:
-    python src/export_dashboard_data.py --riot-id "river3#na1"
+    python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import random
+import re
 
 import joblib
 import numpy as np
@@ -36,6 +37,8 @@ RANDOM_STATE = 42
 K_OPTIONS = [3, 4, 5, 6]
 MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer rows than this
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
+DEFAULT_RIOT_IDS = ["river3#na1", "river#ell"]
+PCA_AXIS_TOP_N = 3
 
 # Curated subset + display labels for the headline percentile comparison.
 # invert=True means a lower raw value is typically the better outcome for this role.
@@ -73,7 +76,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--models-dir", default="models")
     parser.add_argument("--matches-path", default="data/raw/matches.ndjson")
     parser.add_argument("--match-ids-path", default="data/raw/match_ids.ndjson")
-    parser.add_argument("--riot-id", default="river3#na1")
+    parser.add_argument(
+        "--riot-id",
+        action="append",
+        default=None,
+        help="Riot ID to include, e.g. 'river3#na1'. Repeatable. Defaults to both configured accounts.",
+    )
     parser.add_argument("--population-sample", type=int, default=500, help="Scatter background points per role.")
     parser.add_argument("--output-path", default="data/processed/dashboard_data.json")
     return parser.parse_args()
@@ -104,6 +112,42 @@ def name_for_rank(rank: int, k: int) -> str:
 
 def fillna_with_median(matrix: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
     return matrix.fillna(reference.median(numeric_only=True))
+
+
+HEADLINE_LABEL_BY_FEATURE = {column: label for column, label, _ in HEADLINE_FEATURES}
+
+
+def prettify_feature_name(name: str) -> str:
+    if name in HEADLINE_LABEL_BY_FEATURE:
+        return HEADLINE_LABEL_BY_FEATURE[name]
+    label = name
+    for suffix, replacement in (("_per_minute", "/min"), ("_per_min", "/min"), ("_pct", " %")):
+        if label.endswith(suffix):
+            label = label[: -len(suffix)] + replacement
+            break
+    label = label.replace("_", " ")
+    return label[:1].upper() + label[1:]
+
+
+def describe_pca_axis(component: np.ndarray) -> str:
+    # Walk loadings in descending magnitude order, but skip a feature whose label
+    # we've already used -- a few feature pairs (e.g. our own gold_earned_per_min vs.
+    # Riot's already-normalized gold_per_minute) are highly correlated and would
+    # otherwise show up as a confusing near-duplicate in the same caption.
+    order = np.argsort(-np.abs(component))
+    seen_labels: set[str] = set()
+    parts = []
+    for idx in order:
+        label = prettify_feature_name(FEATURE_COLUMNS[idx])
+        normalized = re.sub(r"[^a-z0-9]", "", label.lower())
+        if normalized in seen_labels:
+            continue
+        seen_labels.add(normalized)
+        sign = "higher" if component[idx] >= 0 else "lower"
+        parts.append(f"{sign} {label}")
+        if len(parts) >= PCA_AXIS_TOP_N:
+            break
+    return ", ".join(parts)
 
 
 def build_role_payload(
@@ -168,11 +212,20 @@ def build_role_payload(
 
     my_scatter_xy = [[round(float(x), 4), round(float(y), 4)] for x, y in my_reduced_full[:, :2].tolist()] if len(my_reduced_full) else []
 
+    # PCA components are expressed in *scaled feature* space -- component_[i] is the
+    # loading of each standardized feature onto axis i, so the top absolute loadings
+    # tell us what that axis mostly separates on.
+    pca_axis_labels = {
+        "x": describe_pca_axis(artifact["pca"].components_[0]),
+        "y": describe_pca_axis(artifact["pca"].components_[1]),
+    }
+
     return {
         "population_scatter": scatter,
         "clusters_by_k": clusters_by_k,
         "my_cluster_by_k": my_cluster_by_k,
         "my_scatter_xy": my_scatter_xy,
+        "pca_axis_labels": pca_axis_labels,
     }
 
 
@@ -202,11 +255,22 @@ def build_reference_curves(df: pd.DataFrame, tiers: list[str]) -> dict:
 
 def run(args: argparse.Namespace) -> None:
     df = pd.read_parquet(args.features_path)
+    riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
 
-    puuid = resolve_puuid_from_match_ids(args.match_ids_path, args.riot_id)
-    my_df = df[df["puuid"] == puuid].copy()
-    if my_df.empty:
-        raise RuntimeError(f"No feature rows found for puuid {puuid}. Run build_features.py after fetching matches.")
+    account_frames = []
+    for riot_id in riot_ids:
+        puuid = resolve_puuid_from_match_ids(args.match_ids_path, riot_id)
+        account_df = df[df["puuid"] == puuid].copy()
+        if account_df.empty:
+            print(f"Warning: no feature rows found for {riot_id} (puuid {puuid}). Skipping.")
+            continue
+        account_df["account"] = riot_id
+        account_frames.append(account_df)
+
+    if not account_frames:
+        raise RuntimeError("No feature rows found for any requested Riot ID. Run build_features.py after fetching matches.")
+
+    my_df = pd.concat(account_frames, ignore_index=True)
 
     creation_by_id = load_game_creation_by_match_id(args.matches_path, set(my_df["matchId"]))
     my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
@@ -249,6 +313,7 @@ def run(args: argparse.Namespace) -> None:
         games.append(
             {
                 "matchId": row["matchId"],
+                "account": row["account"],
                 "champion": row["championName"],
                 "role": row["teamPosition"],
                 "win": bool(row["win"]),
@@ -259,28 +324,34 @@ def run(args: argparse.Namespace) -> None:
             }
         )
 
-    record = {
-        "wins": int(my_df["win"].sum()),
-        "losses": int((~my_df["win"]).sum()),
-        "win_rate": round(float(my_df["win"].mean()), 3),
-        "total_games": int(len(my_df)),
-    }
-    role_counts = my_df["teamPosition"].value_counts().to_dict()
-    champion_counts = my_df["championName"].value_counts().to_dict()
+    # Per-account summaries, for notebook/debug introspection only -- the published
+    # dashboard recomputes everything it shows from the filtered `games` list directly.
+    accounts_summary = {}
+    for riot_id in riot_ids:
+        account_df = my_df[my_df["account"] == riot_id]
+        if account_df.empty:
+            continue
+        accounts_summary[riot_id] = {
+            "wins": int(account_df["win"].sum()),
+            "losses": int((~account_df["win"]).sum()),
+            "win_rate": round(float(account_df["win"].mean()), 3),
+            "total_games": int(len(account_df)),
+            "role_counts": account_df["teamPosition"].value_counts().to_dict(),
+            "champion_counts": account_df["championName"].value_counts().to_dict(),
+        }
 
     payload = {
-        "riot_id": args.riot_id,
+        "accounts": list(accounts_summary.keys()),
+        "accounts_summary": accounts_summary,
         "k_options": K_OPTIONS,
         "tiers": tiers,
         "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
-        "record": record,
-        "role_counts": role_counts,
-        "champion_counts": champion_counts,
         "reference": reference,
         "roles": {
             role: {
                 "population_scatter": roles_payload[role]["population_scatter"],
                 "clusters_by_k": roles_payload[role]["clusters_by_k"],
+                "pca_axis_labels": roles_payload[role]["pca_axis_labels"],
             }
             for role in VALID_ROLES
         },

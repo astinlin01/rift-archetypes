@@ -121,11 +121,19 @@ sync with the scripts automatically rather than duplicating logic.
 - **notebooks/03_generate_dashboard.ipynb** -- runs `export_dashboard_data.py` + `build_dashboard.py` and sanity-checks the result. Publishing the output as a Claude Artifact still has to happen from a Claude Code conversation.
 
 ### src/export_dashboard_data.py + src/build_dashboard.py
-Builds a self-contained, **interactive** HTML "scouting report" dashboard for one player. `export_dashboard_data.py` precomputes everything up front for every role, every reference tier, and cluster counts k=3-6 (percentile reference curves, PCA scatter positions, per-k cluster assignments for every game), so the published dashboard can filter by game window (last 20 / last 50 / all time), role, reference tier, and cluster count entirely client-side with no server round trip. `build_dashboard.py` merges the resulting `data/processed/dashboard_data.json` into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.
+Builds a self-contained, **interactive** HTML "scouting report" dashboard. `export_dashboard_data.py` precomputes everything up front -- for every configured account, every role, every reference tier, and cluster counts k=3-6 (percentile reference curves via percentile breakpoints, PCA scatter positions + per-point cluster assignments, PCA axis explainability captions) -- so the published dashboard filters entirely client-side with no server round trip. `build_dashboard.py` merges the resulting `data/processed/dashboard_data.json` into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.
+
+Dashboard filters:
+- **Account** -- switch between configured Riot IDs (e.g. main + smurf) entirely in the browser.
+- **Game window** -- last 20 / last 50 / all time.
+- **Role** -- any role you have games in.
+- **Champion** -- narrow to one champion within the selected role, or all champions.
+- **Compare vs.** -- reference tier (whichever tiers have enough sample size for that role).
+- **Playstyles (k)** -- 3 to 6 clusters; cards, scatter colors, legend, and table archetypes all update together.
 
 Note: cluster counts here are fit fresh per k on the same per-role PCA space purely for the dashboard's slider -- they don't change or replace the "official" per-role models in `models/` that `compare_self.py` uses (those keep whatever k `build_clusters.py`'s silhouette search picked).
 
-- Run: `python src/export_dashboard_data.py --riot-id "river3#na1"` then `python src/build_dashboard.py`
+- Run: `python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"` (repeatable; defaults to both configured accounts) then `python src/build_dashboard.py`
 
 ## Typical run order
 

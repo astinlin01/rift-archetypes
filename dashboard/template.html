@@ -161,6 +161,7 @@
   .kpi .label { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .kpi .value { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 30px; margin-top: 4px; }
   .kpi .value.good { color: var(--good); }
+  .kpi .value.bad { color: var(--critical); }
   .kpi .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
 
   @media (max-width: 720px) {
@@ -268,6 +269,11 @@
   .arch-stat { margin-top: 14px; display: flex; align-items: baseline; gap: 8px; }
   .arch-stat .n { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 26px; }
   .arch-stat .of { font-size: 12.5px; color: var(--ink-muted); }
+  .arch-compare { margin-top: 10px; display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; border-top: 1px solid var(--gridline); }
+  .arch-compare .your-wr { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 18px; }
+  .arch-compare .your-wr.above { color: var(--good); }
+  .arch-compare .your-wr.below { color: var(--critical); }
+  .arch-compare .label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
   /* ---------- Scatter ---------- */
   .scatter-panel { padding: 18px; }
@@ -275,6 +281,9 @@
   .scatter-pop { fill: var(--ink-muted); opacity: 0.28; }
   .scatter-mine { cursor: pointer; }
   .scatter-mine circle.hit { fill: transparent; }
+  .scatter-axis-caption { font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+  .scatter-axis-caption strong { color: var(--ink-2); font-weight: 600; }
+  .scatter-captions { display: flex; flex-direction: column; gap: 4px; padding: 4px 4px 14px; }
 
   /* ---------- Table ---------- */
   .table-wrap { overflow-x: auto; }
@@ -334,6 +343,10 @@
 
 <div class="filter-bar">
   <div class="filter-field">
+    <label for="filter-account">Account</label>
+    <select id="filter-account"></select>
+  </div>
+  <div class="filter-field">
     <label for="filter-window">Game window</label>
     <select id="filter-window">
       <option value="20">Last 20 games</option>
@@ -344,6 +357,10 @@
   <div class="filter-field">
     <label for="filter-role">Role</label>
     <select id="filter-role"></select>
+  </div>
+  <div class="filter-field">
+    <label for="filter-champion">Champion</label>
+    <select id="filter-champion"></select>
   </div>
   <div class="filter-field">
     <label for="filter-tier">Compare vs.</label>
@@ -388,6 +405,8 @@
       <p>A 2D projection (first two PCA components) of the role population, sampled, with your games in the current window plotted on top. Filled = win, ringed = loss.</p>
     </div>
     <div class="panel scatter-panel">
+      <div class="legend-row" id="scatter-legend" style="border-bottom:none;padding:4px 4px 10px;"></div>
+      <div class="scatter-captions" id="scatter-captions"></div>
       <svg id="scatter" class="scatter-svg" viewBox="0 0 760 440" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
   </section>
@@ -472,19 +491,21 @@
   }
 
   // ---------- Populate filter selects ----------
+  var accountSelect = document.getElementById('filter-account');
+  var windowSelect = document.getElementById('filter-window');
   var roleSelect = document.getElementById('filter-role');
-  ROLE_ORDER.filter(function (r) { return DATA.roles[r]; }).forEach(function (role) {
-    var opt = document.createElement('option');
-    opt.value = role;
-    opt.textContent = titleCase(role) + (DATA.role_counts[role] ? ' (' + DATA.role_counts[role] + ' games)' : ' (0 games)');
-    roleSelect.appendChild(opt);
-  });
-  var defaultRole = ROLE_ORDER.reduce(function (best, r) {
-    return (DATA.role_counts[r] || 0) > (DATA.role_counts[best] || 0) ? r : best;
-  }, ROLE_ORDER[0]);
-  roleSelect.value = defaultRole;
-
+  var championSelect = document.getElementById('filter-champion');
+  var tierSelect = document.getElementById('filter-tier');
   var kSelect = document.getElementById('filter-k');
+
+  DATA.accounts.forEach(function (riotId) {
+    var opt = document.createElement('option');
+    opt.value = riotId;
+    opt.textContent = riotId;
+    accountSelect.appendChild(opt);
+  });
+  accountSelect.value = DATA.accounts[0];
+
   DATA.k_options.forEach(function (k) {
     var opt = document.createElement('option');
     opt.value = k;
@@ -492,7 +513,49 @@
     kSelect.appendChild(opt);
   });
 
-  var tierSelect = document.getElementById('filter-tier');
+  function accountGames() {
+    return DATA.games.filter(function (g) { return g.account === accountSelect.value; });
+  }
+
+  function refreshRoleOptions() {
+    var previous = roleSelect.value;
+    var counts = {};
+    accountGames().forEach(function (g) { counts[g.role] = (counts[g.role] || 0) + 1; });
+    roleSelect.innerHTML = '';
+    ROLE_ORDER.filter(function (r) { return DATA.roles[r]; }).forEach(function (role) {
+      var opt = document.createElement('option');
+      opt.value = role;
+      opt.textContent = titleCase(role) + ' (' + (counts[role] || 0) + ' games)';
+      roleSelect.appendChild(opt);
+    });
+    var defaultRole = ROLE_ORDER.reduce(function (best, r) {
+      return (counts[r] || 0) > (counts[best] || 0) ? r : best;
+    }, ROLE_ORDER[0]);
+    roleSelect.value = (counts[previous] ? previous : defaultRole);
+  }
+
+  function refreshChampionOptions() {
+    var previous = championSelect.value;
+    var role = roleSelect.value;
+    var counts = {};
+    accountGames().filter(function (g) { return g.role === role; }).forEach(function (g) {
+      counts[g.champion] = (counts[g.champion] || 0) + 1;
+    });
+    var champions = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    championSelect.innerHTML = '';
+    var allOpt = document.createElement('option');
+    allOpt.value = 'ALL';
+    allOpt.textContent = 'All champions';
+    championSelect.appendChild(allOpt);
+    champions.forEach(function (champ) {
+      var opt = document.createElement('option');
+      opt.value = champ;
+      opt.textContent = champ + ' (' + counts[champ] + ')';
+      championSelect.appendChild(opt);
+    });
+    championSelect.value = (champions.indexOf(previous) !== -1) ? previous : 'ALL';
+  }
+
   function refreshTierOptions() {
     var role = roleSelect.value;
     var previous = tierSelect.value;
@@ -510,44 +573,69 @@
       tierSelect.value = 'CHALLENGER';
     }
   }
+
+  refreshRoleOptions();
+  refreshChampionOptions();
   refreshTierOptions();
 
-  [document.getElementById('filter-window'), roleSelect, tierSelect, kSelect].forEach(function (el) {
-    el.addEventListener('change', function () {
-      if (el === roleSelect) refreshTierOptions();
-      renderAll();
-    });
+  accountSelect.addEventListener('change', function () {
+    refreshRoleOptions();
+    refreshChampionOptions();
+    refreshTierOptions();
+    renderAll();
   });
-
-  // ---------- Header (static parts) ----------
-  document.getElementById('hdr-title').textContent = DATA.riot_id + ' — Scouting Report';
+  roleSelect.addEventListener('change', function () {
+    refreshChampionOptions();
+    refreshTierOptions();
+    renderAll();
+  });
+  [windowSelect, championSelect, tierSelect, kSelect].forEach(function (el) {
+    el.addEventListener('change', renderAll);
+  });
 
   function currentFilters() {
     return {
-      windowSize: parseInt(document.getElementById('filter-window').value, 10),
+      account: accountSelect.value,
+      windowSize: parseInt(windowSelect.value, 10),
       role: roleSelect.value,
+      champion: championSelect.value,
       tier: tierSelect.value,
       k: kSelect.value
     };
   }
 
-  function windowedGames(windowSize) {
-    return windowSize > 0 ? DATA.games.slice(0, windowSize) : DATA.games;
+  function windowedGames(filters) {
+    var games = accountGames();
+    return filters.windowSize > 0 ? games.slice(0, filters.windowSize) : games;
   }
 
-  function renderHeader(filters, windowGames) {
+  function winRateOf(games) {
+    if (!games.length) return null;
+    var wins = games.filter(function (g) { return g.win; }).length;
+    return wins / games.length;
+  }
+
+  function renderHeader(filters, windowGames, champGames) {
+    document.getElementById('hdr-title').textContent = filters.account + ' — Scouting Report';
+    document.getElementById('hdr-sub').textContent =
+      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games on record for ' + filters.account + '.';
+
     var wins = windowGames.filter(function (g) { return g.win; }).length;
     var losses = windowGames.length - wins;
-    var winRate = windowGames.length ? wins / windowGames.length : 0;
-    var roleGamesInWindow = windowGames.filter(function (g) { return g.role === filters.role; }).length;
-
-    document.getElementById('hdr-sub').textContent =
-      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games on record.';
+    var overallWinRate = winRateOf(windowGames);
+    var scopedWinRate = winRateOf(champGames);
+    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' · ' + filters.champion : '');
 
     var kpis = [
-      { label: 'Record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
-      { label: 'Win rate', value: pct(winRate * 100), foot: winRate >= 0.5 ? 'above 50%' : 'below 50%', good: winRate >= 0.5 },
-      { label: 'Selected role', value: titleCase(filters.role), foot: roleGamesInWindow + ' of ' + windowGames.length + ' games' },
+      { label: 'Overall record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
+      {
+        label: scopeLabel + ' win rate',
+        value: scopedWinRate === null ? '—' : pct(scopedWinRate * 100),
+        foot: champGames.length + ' games',
+        good: scopedWinRate !== null && scopedWinRate >= 0.5,
+        bad: scopedWinRate !== null && scopedWinRate < 0.5
+      },
+      { label: 'Selected scope', value: scopeLabel, foot: champGames.length + ' of ' + windowGames.length + ' games in window' },
       { label: 'Comparing vs.', value: filters.tier ? titleCase(filters.tier) : '—', foot: 'reference tier' }
     ];
     var kpiRow = document.getElementById('kpi-row');
@@ -557,7 +645,7 @@
       el.className = 'kpi';
       el.innerHTML =
         '<div class="label">' + k.label + '</div>' +
-        '<div class="value' + (k.good ? ' good' : '') + '">' + k.value + '</div>' +
+        '<div class="value' + (k.good ? ' good' : '') + (k.bad ? ' bad' : '') + '">' + k.value + '</div>' +
         '<div class="foot">' + k.foot + '</div>';
       kpiRow.appendChild(el);
     });
@@ -567,17 +655,18 @@
   }
 
   // ---------- Diverging bar chart ----------
-  function renderPercentiles(filters, roleGames) {
+  function renderPercentiles(filters, champGames) {
     var container = document.getElementById('divbars');
     container.innerHTML = '';
     var refForRoleTier = DATA.reference[filters.role] && DATA.reference[filters.role][filters.tier];
+    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
 
     document.getElementById('percentiles-sub').textContent =
-      'Your ' + titleCase(filters.role) + ' average in the current window against ' + titleCase(filters.tier || '—') +
+      'Your ' + scopeLabel + ' average in the current window against ' + titleCase(filters.tier || '—') +
       ' ' + titleCase(filters.role) + ' players, by performance percentile.';
 
-    if (!roleGames.length) {
-      container.innerHTML = '<div class="empty-state">No ' + titleCase(filters.role) + ' games in this window.</div>';
+    if (!champGames.length) {
+      container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
       return;
     }
     if (!refForRoleTier) {
@@ -588,7 +677,7 @@
     DATA.headline_features.forEach(function (f) {
       var curve = refForRoleTier[f.feature];
       if (!curve) return;
-      var yourAvg = mean(roleGames.map(function (g) { return g.features[f.feature]; }));
+      var yourAvg = mean(champGames.map(function (g) { return g.features[f.feature]; }));
       if (yourAvg === null) return;
 
       var rawPercentile = percentileFromBreakpoints(yourAvg, curve.breakpoints);
@@ -648,10 +737,11 @@
     'Dominant Carry': 'Highest win rate of the group — the clearest "carried the game" profile.'
   };
 
-  function renderArchetypes(filters, roleGames) {
+  function renderArchetypes(filters, champGames) {
     var grid = document.getElementById('card-grid');
     grid.innerHTML = '';
-    document.getElementById('archetypes-heading').textContent = titleCase(filters.role) + ' archetypes';
+    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    document.getElementById('archetypes-heading').textContent = scopeLabel + ' archetypes';
 
     var roleData = DATA.roles[filters.role];
     var kData = roleData && roleData.clusters_by_k[filters.k];
@@ -660,10 +750,12 @@
       return;
     }
 
-    var yourCounts = {};
-    roleGames.forEach(function (g) {
+    var yourGamesByCluster = {};
+    champGames.forEach(function (g) {
       var c = g.clusterByK[filters.k];
-      if (c !== undefined) yourCounts[c] = (yourCounts[c] || 0) + 1;
+      if (c === undefined) return;
+      if (!yourGamesByCluster[c]) yourGamesByCluster[c] = [];
+      yourGamesByCluster[c].push(g);
     });
 
     var sorted = kData.summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
@@ -671,8 +763,23 @@
 
     sorted.forEach(function (c, rank) {
       var color = SLOTS[rank % SLOTS.length];
-      var yourCount = yourCounts[c.cluster] || 0;
-      var yourShare = roleGames.length ? Math.round((yourCount / roleGames.length) * 100) : 0;
+      var yourGames = yourGamesByCluster[c.cluster] || [];
+      var yourCount = yourGames.length;
+      var yourShare = champGames.length ? Math.round((yourCount / champGames.length) * 100) : 0;
+      var yourWinRate = winRateOf(yourGames);
+
+      var compareHtml = '';
+      if (yourCount > 0) {
+        var vsClass = yourWinRate >= c.win_rate ? 'above' : 'below';
+        var vsSign = yourWinRate >= c.win_rate ? '+' : '−';
+        var vsDelta = Math.round(Math.abs(yourWinRate - c.win_rate) * 100);
+        compareHtml =
+          '<div class="arch-compare">' +
+          '<div><div class="label">Your win rate here</div><div class="your-wr ' + vsClass + '">' + pct(yourWinRate * 100) + '</div></div>' +
+          '<div style="text-align:right"><div class="label">vs. population</div><div class="your-wr ' + vsClass + '">' + vsSign + vsDelta + '</div></div>' +
+          '</div>';
+      }
+
       var card = document.createElement('div');
       card.className = 'panel arch-card';
       card.innerHTML =
@@ -680,7 +787,8 @@
         '<div class="desc" style="font-size:13px;color:var(--ink-2);margin-top:8px;">' + (descByRankName[c.name] || '') + '</div>' +
         '<div class="meter-label"><span>Population win rate</span><span class="mono tabular">' + pct(c.win_rate * 100) + '</span></div>' +
         '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate / maxWinRate * 100) + ';background:' + color + '"></div></div>' +
-        '<div class="arch-stat"><span class="n mono">' + yourCount + '</span><span class="of">of your ' + roleGames.length + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>';
+        '<div class="arch-stat"><span class="n mono">' + yourCount + '</span><span class="of">of your ' + champGames.length + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>' +
+        compareHtml;
       grid.appendChild(card);
     });
   }
@@ -697,17 +805,37 @@
     return map;
   }
 
-  function renderScatter(filters, roleGames) {
+  function renderScatter(filters, champGames) {
     svg.innerHTML = '';
     var roleData = DATA.roles[filters.role];
     var kData = roleData && roleData.clusters_by_k[filters.k];
+
+    var legend = document.getElementById('scatter-legend');
+    if (kData) {
+      var legendSorted = kData.summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
+      legend.innerHTML = legendSorted.map(function (c, rank) {
+        return '<span class="legend-item"><span class="legend-swatch" style="background:' + SLOTS[rank % SLOTS.length] + '"></span>' + c.name + '</span>';
+      }).join('');
+    } else {
+      legend.innerHTML = '';
+    }
+
+    var captions = document.getElementById('scatter-captions');
+    if (roleData && roleData.pca_axis_labels) {
+      captions.innerHTML =
+        '<div class="scatter-axis-caption">→ Horizontal axis mostly separates by: <strong>' + roleData.pca_axis_labels.x + '</strong></div>' +
+        '<div class="scatter-axis-caption">↑ Vertical axis mostly separates by: <strong>' + roleData.pca_axis_labels.y + '</strong></div>';
+    } else {
+      captions.innerHTML = '';
+    }
+
     if (!roleData || !kData) return;
 
     var popX = roleData.population_scatter.x, popY = roleData.population_scatter.y;
     var popLabels = kData.sample_labels;
     var colorMap = rankColorMap(kData.summary);
 
-    var mineXY = roleGames.filter(function (g) { return g.scatterXY; });
+    var mineXY = champGames.filter(function (g) { return g.scatterXY; });
 
     var allX = popX.concat(mineXY.map(function (g) { return g.scatterXY[0]; }));
     var allY = popY.concat(mineXY.map(function (g) { return g.scatterXY[1]; }));
@@ -718,9 +846,15 @@
     function sy(y) { return H - PAD - (y - yMin) / (yMax - yMin) * (H - 2 * PAD); }
 
     for (var i = 0; i < popX.length; i++) {
+      var popInfo = colorMap[popLabels[i]];
       var c = document.createElementNS(svgNS, 'circle');
       c.setAttribute('cx', sx(popX[i])); c.setAttribute('cy', sy(popY[i])); c.setAttribute('r', 2.6);
-      c.setAttribute('class', 'scatter-pop');
+      if (popInfo) {
+        c.setAttribute('fill', popInfo.color);
+        c.setAttribute('opacity', 0.3);
+      } else {
+        c.setAttribute('class', 'scatter-pop');
+      }
       svg.appendChild(c);
     }
 
@@ -818,13 +952,14 @@
 
   function renderAll() {
     var filters = currentFilters();
-    var windowGames = windowedGames(filters.windowSize);
+    var windowGames = windowedGames(filters);
     var roleGames = windowGames.filter(function (g) { return g.role === filters.role; });
+    var champGames = filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
 
-    renderHeader(filters, windowGames);
-    renderPercentiles(filters, roleGames);
-    renderArchetypes(filters, roleGames);
-    renderScatter(filters, roleGames);
+    renderHeader(filters, windowGames, champGames);
+    renderPercentiles(filters, champGames);
+    renderArchetypes(filters, champGames);
+    renderScatter(filters, champGames);
     renderTable(filters, windowGames);
   }
 
