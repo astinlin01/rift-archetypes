@@ -67,9 +67,9 @@ Outputs:
 - `data/raw/failures/match_details_failures.ndjson`
 
 ### src/fetch_recent_self.py
-Pulls your own most recent ranked matches directly (resolve Riot ID -> recent match IDs -> match details) without scanning the full league pool. Appends into the same `match_ids.ndjson`/`matches.ndjson` files, so a normal `build_features.py` run picks the new games up.
+Pulls your own ranked match history directly (resolve Riot ID -> paginate match-v5 -> match details) without scanning the full league pool. By default it paginates until it runs out of history (100 IDs per call, the API max); pass `--max-games` to cap it. Appends into the same `match_ids.ndjson`/`matches.ndjson` files, so a normal `build_features.py` run picks the new games up. Safe to re-run -- already-fetched IDs/details are skipped.
 
-- Run: `python src/fetch_recent_self.py --riot-id "river3#na1" --count 20`
+- Run: `python src/fetch_recent_self.py --riot-id "river3#na1"` (all history) or add `--max-games 50`
 
 ### src/eda_overview.py
 Profiles the collected JSON/NDJSON files and writes a markdown schema and descriptive-statistics report.
@@ -109,8 +109,16 @@ Assigns your own matches to the fitted per-role clusters and compares your per-f
 - Run: `python src/compare_self.py --riot-id "river3#na1"` (or `--puuid <puuid>`, repeatable)
 - Output: `data/processed/self_comparison.csv`
 
-### notebooks/01_explore_clusters.ipynb
-Exploration only (not required for the pipeline to run) -- PCA scatter plots per role, centroid bar charts, and tier mix per cluster, reading from `data/processed/` and `models/`.
+## Notebooks
+
+All scripts in `src/` are runnable interactively from `notebooks/` -- each notebook cell
+simulates the script's CLI invocation (`sys.argv` + `parse_args()`), so the notebooks stay in
+sync with the scripts automatically rather than duplicating logic.
+
+- **notebooks/00_pull_data.ipynb** -- pull your own recent/full match history (wraps `fetch_recent_self.py`), rebuild the feature table, and optionally refresh the full ranked pool.
+- **notebooks/01_explore_clusters.ipynb** -- PCA scatter plots per role, centroid bar charts, and tier mix per cluster, reading from `data/processed/` and `models/`.
+- **notebooks/02_self_analysis.ipynb** -- interactive version of `compare_self.py`: a styled percentile table, a percentile bar chart, cluster distribution, and a per-game stat trend over time.
+- **notebooks/03_generate_dashboard.ipynb** -- runs `export_dashboard_data.py` + `build_dashboard.py` and sanity-checks the result. Publishing the output as a Claude Artifact still has to happen from a Claude Code conversation.
 
 ### src/export_dashboard_data.py + src/build_dashboard.py
 Builds a self-contained HTML "scouting report" dashboard for one player -- percentile comparison vs. a reference tier, cluster archetype cards, a PCA scatter with your games highlighted, and a recent-games table. `export_dashboard_data.py` writes `data/processed/dashboard_data.json`; `build_dashboard.py` merges it into `dashboard/template.html` to produce `dashboard/river3_scouting_report.html`, which can be published as a Claude Artifact.

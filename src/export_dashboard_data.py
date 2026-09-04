@@ -54,7 +54,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--riot-id", default="river3#na1")
     parser.add_argument("--reference-tier", default="CHALLENGER")
     parser.add_argument("--focus-role", default="BOTTOM")
-    parser.add_argument("--recent-games", type=int, default=20)
+    parser.add_argument(
+        "--recent-games",
+        type=int,
+        default=0,
+        help="Most recent games to include. 0 (default) includes all games found for this puuid.",
+    )
     parser.add_argument("--population-sample", type=int, default=700)
     parser.add_argument("--output-path", default="data/processed/dashboard_data.json")
     return parser.parse_args()
@@ -142,10 +147,11 @@ def run(args: argparse.Namespace) -> None:
     if my_df.empty:
         raise RuntimeError(f"No feature rows found for puuid {puuid}. Run build_features.py after fetching matches.")
 
-    match_ids_needed = set(my_df["matchId"].head(args.recent_games))
     creation_by_id = load_game_creation_by_match_id(args.matches_path, set(my_df["matchId"]))
     my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
-    my_df = my_df.sort_values("gameCreation", ascending=False).head(args.recent_games)
+    my_df = my_df.sort_values("gameCreation", ascending=False)
+    if args.recent_games > 0:
+        my_df = my_df.head(args.recent_games)
 
     record = {
         "wins": int(my_df["win"].sum()),

@@ -1,14 +1,16 @@
 """
-Fetch your own most recent ranked matches without scanning the full league pool.
+Fetch your own ranked match history without scanning the full league pool.
 
-Resolves one or more Riot IDs, pulls their most recent match IDs, and appends
-any new ones (plus full match payloads) straight into the same
+Resolves one or more Riot IDs and paginates through match-v5 (100 IDs per
+call, the API max) until it runs out of history or hits --max-games, then
+appends any new match IDs (plus full match payloads) straight into the same
 data/raw/match_ids.ndjson and data/raw/matches.ndjson files the main pipeline
-uses, so build_features.py picks them up on the next run.
+uses, so build_features.py picks them up on the next run. Safe to re-run --
+already-fetched match IDs/details are skipped.
 
 Run from repo root:
-    python src/fetch_recent_self.py
-    python src/fetch_recent_self.py --riot-id "river3#na1" --count 20
+    python src/fetch_recent_self.py                        # all available history
+    python src/fetch_recent_self.py --riot-id "river3#na1" --max-games 50
 """
 
 from __future__ import annotations
@@ -38,8 +40,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch your own recent matches only.")
     parser.add_argument("--platform", default="na1")
     parser.add_argument("--queue", type=int, default=420)
-    parser.add_argument("--count", type=int, default=20, help="Most recent matches to pull per account.")
-    parser.add_argument("--start", type=int, default=0)
+    parser.add_argument("--page-size", type=int, default=100, help="Match IDs per API call (100 is the Riot max).")
+    parser.add_argument(
+        "--max-games",
+        type=int,
+        default=0,
+        help="Stop after this many match IDs per account. 0 (default) pulls all available history.",
+    )
+    parser.add_argument("--start", type=int, default=0, help="Riot match-history offset to start paginating from.")
     parser.add_argument(
         "--riot-id",
         action="append",
@@ -91,10 +99,23 @@ def run(args: argparse.Namespace) -> None:
             print(f"Riot ID {riot_id} resolved without puuid. Skipping.")
             continue
 
-        print(f"Fetching {args.count} most recent matches for {riot_id}...")
-        match_ids = client.get_match_ids(
-            puuid=puuid, queue=args.queue, count=args.count, start=args.start
-        )
+        print(f"Fetching match history for {riot_id} (page size {args.page_size})...")
+        match_ids: list[str] = []
+        start = args.start
+        while True:
+            batch = client.get_match_ids(
+                puuid=puuid, queue=args.queue, count=args.page_size, start=start
+            )
+            if not batch:
+                break
+            match_ids.extend(batch)
+            start += len(batch)
+            print(f"  ...{len(match_ids)} match ID(s) so far")
+            if len(batch) < args.page_size:
+                break  # fewer than a full page means we've reached the end of history
+            if args.max_games > 0 and len(match_ids) >= args.max_games:
+                match_ids = match_ids[: args.max_games]
+                break
 
         new_ids = [match_id for match_id in match_ids if match_id not in seen_match_ids]
         for match_id in new_ids:
@@ -112,7 +133,7 @@ def run(args: argparse.Namespace) -> None:
             )
             seen_match_ids.add(match_id)
         total_new_ids += len(new_ids)
-        print(f"  {len(new_ids)} new match ID(s) out of {len(match_ids)} fetched.")
+        print(f"  {len(new_ids)} new match ID(s) out of {len(match_ids)} total available.")
 
         ids_to_fetch_details = [match_id for match_id in match_ids if match_id not in fetched_match_ids]
         for match_id in ids_to_fetch_details:

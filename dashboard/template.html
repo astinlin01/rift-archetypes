@@ -326,8 +326,8 @@
   <section id="section-games">
     <div class="section-head">
       <div class="eyebrow">Match log</div>
-      <h2>Last 20 ranked games</h2>
-      <p>Most recent first. Archetype is only assigned for the Bot lane sample size below supports clustering.</p>
+      <h2 id="games-heading">Ranked games</h2>
+      <p id="games-sub">Most recent first. Archetype is only assigned for the role the clustering above supports.</p>
     </div>
     <div class="panel table-wrap">
       <table class="games" id="games-table">
@@ -389,7 +389,10 @@
   document.title = 'River3 Scouting Report';
   var roleEntries = Object.keys(DATA.role_counts).map(function (r) { return r + ' ×' + DATA.role_counts[r]; }).join('   ·   ');
   document.getElementById('hdr-sub').textContent =
-    'Last ' + DATA.record.total_games + ' ranked games. ' + roleEntries + '.';
+    'All ' + DATA.record.total_games + ' ranked games on record. ' + roleEntries + '.';
+  document.getElementById('games-heading').textContent = 'All ' + DATA.record.total_games + ' ranked games';
+  document.getElementById('games-sub').textContent =
+    'Most recent first. Archetype is only assigned for ' + titleCase(DATA.focus_role) + ' lane, the role the clustering above supports.';
 
   function titleCase(s) {
     return s.charAt(0) + s.slice(1).toLowerCase();
