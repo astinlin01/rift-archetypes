@@ -21,6 +21,9 @@ from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
 
 FEATURE_COLUMNS = [field.name for field in ALL_FEATURE_FIELDS]
 RANDOM_STATE = 42
+# silhouette_score is O(n^2) (full pairwise distances) -- exact is intractable once a
+# role's population reaches tens of thousands of rows, so cap it to a random sample.
+SILHOUETTE_SAMPLE_SIZE = 3000
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,7 +67,11 @@ def pick_best_k(scaled_matrix, min_k: int, max_k: int) -> tuple[int, dict[int, f
     for k in range(min_k, upper_k + 1):
         model = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
         labels = model.fit_predict(scaled_matrix)
-        score = silhouette_score(scaled_matrix, labels)
+        score = silhouette_score(
+            scaled_matrix, labels,
+            sample_size=min(SILHOUETTE_SAMPLE_SIZE, n_samples),
+            random_state=RANDOM_STATE,
+        )
         scores[k] = score
 
     best_k = max(scores, key=scores.get)
@@ -92,7 +99,13 @@ def fit_role_cluster(
         best_k = k_override
         model = KMeans(n_clusters=best_k, random_state=RANDOM_STATE, n_init=10)
         labels = model.fit_predict(reduced)
-        scores = {best_k: silhouette_score(reduced, labels)}
+        scores = {
+            best_k: silhouette_score(
+                reduced, labels,
+                sample_size=min(SILHOUETTE_SAMPLE_SIZE, reduced.shape[0]),
+                random_state=RANDOM_STATE,
+            )
+        }
     else:
         best_k, scores = pick_best_k(reduced, min_k, max_k)
         model = KMeans(n_clusters=best_k, random_state=RANDOM_STATE, n_init=10)
