@@ -304,6 +304,9 @@
   .pill.loss { background: color-mix(in oklab, var(--critical) 16%, transparent); color: var(--critical); }
   .arch-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
   .arch-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .champ-cell { display: inline-flex; align-items: center; gap: 8px; }
+  .champ-icon { width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; display: block; object-fit: cover; }
+  .champ-icon.sm { width: 18px; height: 18px; border-radius: 4px; }
 
   /* ---------- Tooltip ---------- */
   #tooltip {
@@ -447,6 +450,7 @@
 (function () {
   var DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
   var ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+  var ALL_ROLES = 'ALL';
   var SLOTS = ['var(--slot-0)', 'var(--slot-1)', 'var(--slot-2)', 'var(--slot-3)', 'var(--slot-4)', 'var(--slot-5)'];
 
   document.title = 'River3 Scouting Report';
@@ -470,6 +474,19 @@
   }
   function pct(n) { return Math.round(n) + '%'; }
   function titleCase(s) { return s.charAt(0) + s.slice(1).toLowerCase(); }
+  var ROLE_DISPLAY_NAMES = { ALL: 'All Roles', UTILITY: 'Support' };
+  function roleLabel(role) { return ROLE_DISPLAY_NAMES[role] || titleCase(role); }
+
+  function championIconImg(champion, sizeClass) {
+    var src = DATA.champion_icons && DATA.champion_icons[champion];
+    if (!src) return '';
+    var img = document.createElement('img');
+    img.className = 'champ-icon' + (sizeClass ? ' ' + sizeClass : '');
+    img.src = src;
+    img.alt = '';
+    img.loading = 'lazy';
+    return img;
+  }
 
   function percentileFromBreakpoints(value, breakpoints) {
     var n = breakpoints.length;
@@ -521,26 +538,33 @@
 
   function refreshRoleOptions() {
     var previous = roleSelect.value;
+    var games = accountGames();
     var counts = {};
-    accountGames().forEach(function (g) { counts[g.role] = (counts[g.role] || 0) + 1; });
+    games.forEach(function (g) { counts[g.role] = (counts[g.role] || 0) + 1; });
     roleSelect.innerHTML = '';
+
+    var allOpt = document.createElement('option');
+    allOpt.value = ALL_ROLES;
+    allOpt.textContent = roleLabel(ALL_ROLES) + ' (' + games.length + ' games)';
+    roleSelect.appendChild(allOpt);
+
     ROLE_ORDER.filter(function (r) { return DATA.roles[r]; }).forEach(function (role) {
       var opt = document.createElement('option');
       opt.value = role;
-      opt.textContent = titleCase(role) + ' (' + (counts[role] || 0) + ' games)';
+      opt.textContent = roleLabel(role) + ' (' + (counts[role] || 0) + ' games)';
       roleSelect.appendChild(opt);
     });
     var defaultRole = ROLE_ORDER.reduce(function (best, r) {
       return (counts[r] || 0) > (counts[best] || 0) ? r : best;
     }, ROLE_ORDER[0]);
-    roleSelect.value = (counts[previous] ? previous : defaultRole);
+    roleSelect.value = (previous && (previous === ALL_ROLES || counts[previous])) ? previous : defaultRole;
   }
 
   function refreshChampionOptions() {
     var previous = championSelect.value;
     var role = roleSelect.value;
     var counts = {};
-    accountGames().filter(function (g) { return g.role === role; }).forEach(function (g) {
+    accountGames().filter(function (g) { return role === ALL_ROLES || g.role === role; }).forEach(function (g) {
       counts[g.champion] = (counts[g.champion] || 0) + 1;
     });
     var champions = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
@@ -626,7 +650,7 @@
     var losses = windowGames.length - wins;
     var overallWinRate = winRateOf(windowGames);
     var scopedWinRate = winRateOf(champGames);
-    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' · ' + filters.champion : '');
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' · ' + filters.champion : '');
 
     var kpis = [
       { label: 'Overall record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
@@ -661,18 +685,18 @@
     var container = document.getElementById('divbars');
     container.innerHTML = '';
     var refForRoleTier = DATA.reference[filters.role] && DATA.reference[filters.role][filters.tier];
-    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
 
     document.getElementById('percentiles-sub').textContent =
       'Your ' + scopeLabel + ' average in the current window against ' + titleCase(filters.tier || '—') +
-      ' ' + titleCase(filters.role) + ' players, by performance percentile.';
+      ' ' + roleLabel(filters.role) + ' players, by performance percentile.';
 
     if (!champGames.length) {
       container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
       return;
     }
     if (!refForRoleTier) {
-      container.innerHTML = '<div class="empty-state">Not enough ' + titleCase(filters.tier || '') + ' ' + titleCase(filters.role) + ' data to compare against yet.</div>';
+      container.innerHTML = '<div class="empty-state">Not enough ' + titleCase(filters.tier || '') + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
       return;
     }
 
@@ -742,8 +766,13 @@
   function renderArchetypes(filters, champGames) {
     var grid = document.getElementById('card-grid');
     grid.innerHTML = '';
-    var scopeLabel = titleCase(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
     document.getElementById('archetypes-heading').textContent = scopeLabel + ' archetypes';
+
+    if (filters.role === ALL_ROLES) {
+      grid.innerHTML = '<div class="empty-state">Select a specific role to see playstyle archetypes — clustering is fit separately per role, since role is the dominant driver of raw stats.</div>';
+      return;
+    }
 
     var roleData = DATA.roles[filters.role];
     var kData = roleData && roleData.clusters_by_k[filters.k];
@@ -836,7 +865,9 @@
     }
 
     var captions = document.getElementById('scatter-captions');
-    if (roleData && roleData.pca_axis_labels) {
+    if (filters.role === ALL_ROLES) {
+      captions.innerHTML = '<div class="scatter-axis-caption">Select a specific role to see the cluster space — PCA and clustering are fit separately per role.</div>';
+    } else if (roleData && roleData.pca_axis_labels) {
       captions.innerHTML =
         '<div class="scatter-axis-caption">→ Horizontal axis mostly separates by: <strong>' + roleData.pca_axis_labels.x + '</strong></div>' +
         '<div class="scatter-axis-caption">↑ Vertical axis mostly separates by: <strong>' + roleData.pca_axis_labels.y + '</strong></div>';
@@ -893,8 +924,9 @@
       gEl.appendChild(hit);
 
       gEl.addEventListener('pointerenter', function (e) {
+        var icon = championIconImg(g.champion, 'sm');
         showTooltip(e,
-          '<div class="tt-title">' + g.champion + '</div>' +
+          '<div class="tt-title" style="display:flex;align-items:center;gap:6px;">' + (icon ? icon.outerHTML : '') + g.champion + '</div>' +
           '<div class="tt-row"><span>Result</span><strong>' + (g.win ? 'Win' : 'Loss') + '</strong></div>' +
           '<div class="tt-row"><span>Archetype</span><strong>' + info.name + '</strong></div>'
         );
@@ -907,8 +939,9 @@
 
   // ---------- Games table ----------
   function renderTable(filters, windowGames) {
-    document.getElementById('games-sub').textContent =
-      'Most recent first, across all roles in the current game window. Archetype shown for ' + titleCase(filters.role) + ' games (k=' + filters.k + ').';
+    document.getElementById('games-sub').textContent = filters.role === ALL_ROLES
+      ? 'Most recent first, across all roles in the current game window. Select a specific role above to see archetype assignments.'
+      : 'Most recent first, across all roles in the current game window. Archetype shown for ' + roleLabel(filters.role) + ' games (k=' + filters.k + ').';
 
     var tbody = document.getElementById('games-tbody');
     tbody.innerHTML = '';
@@ -927,10 +960,15 @@
       tdResult.appendChild(pill);
 
       var tdChamp = document.createElement('td');
-      tdChamp.textContent = g.champion;
+      var champCell = document.createElement('span');
+      champCell.className = 'champ-cell';
+      var champIcon = championIconImg(g.champion);
+      if (champIcon) champCell.appendChild(champIcon);
+      champCell.appendChild(document.createTextNode(g.champion));
+      tdChamp.appendChild(champCell);
 
       var tdRole = document.createElement('td');
-      tdRole.textContent = titleCase(g.role);
+      tdRole.textContent = roleLabel(g.role);
 
       var tdKda = document.createElement('td'); tdKda.className = 'num'; tdKda.textContent = fmt(g.features.kda, 2);
       var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.features.cs_per_min, 1);
@@ -968,7 +1006,7 @@
   function renderAll() {
     var filters = currentFilters();
     var windowGames = windowedGames(filters);
-    var roleGames = windowGames.filter(function (g) { return g.role === filters.role; });
+    var roleGames = filters.role === ALL_ROLES ? windowGames : windowGames.filter(function (g) { return g.role === filters.role; });
     var champGames = filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
 
     renderHeader(filters, windowGames, champGames);

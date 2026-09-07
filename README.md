@@ -126,10 +126,14 @@ Builds a self-contained, **interactive** HTML "scouting report" dashboard. `expo
 Dashboard filters:
 - **Account** -- switch between configured Riot IDs (e.g. main + smurf) entirely in the browser.
 - **Game window** -- last 20 / last 50 / all time.
-- **Role** -- any role you have games in.
+- **Role** -- any role you have games in, or "All Roles" for an overall (non-role-specific) view -- the percentile chart still works there (aggregated across roles), but the archetype cards and cluster-space scatter require picking a specific role, since clustering is fit separately per role.
 - **Champion** -- narrow to one champion within the selected role, or all champions.
-- **Compare vs.** -- reference tier (whichever tiers have enough sample size for that role).
+- **Compare vs.** -- reference tier, ordered Challenger > Grandmaster > Master > Diamond (whichever tiers have enough sample size for that role).
 - **Playstyles (k)** -- 3 to 6 clusters; cards, scatter colors, legend, and table archetypes all update together.
+
+Each archetype card shows two comparisons against the population: your win rate within that cluster, and your *share* of games landing in it (over/under-represented vs. the population's own distribution across clusters).
+
+Champion icons are fetched from Data Dragon at export time, cached under `data/raw/champion_icon_cache/`, and embedded as base64 data URIs in the dashboard JSON -- a published Artifact's CSP blocks image requests to external hosts, so hotlinking the CDN directly wouldn't render.
 
 Note: cluster counts here are fit fresh per k on the same per-role PCA space purely for the dashboard's slider -- they don't change or replace the "official" per-role models in `models/` that `compare_self.py` uses (those keep whatever k `build_clusters.py`'s silhouette search picked).
 

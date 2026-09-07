@@ -19,6 +19,7 @@ Run from repo root:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import random
@@ -27,6 +28,7 @@ import re
 import joblib
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.cluster import KMeans
 
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
@@ -39,6 +41,15 @@ MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer rows than th
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
 DEFAULT_RIOT_IDS = ["river3#na1", "river#ell"]
 PCA_AXIS_TOP_N = 3
+ALL_ROLES_KEY = "ALL"
+
+# Highest-to-lowest, so the "Compare vs." dropdown reads Challenger > Grandmaster >
+# Master > Diamond instead of alphabetically.
+TIER_RANK = {"CHALLENGER": 0, "GRANDMASTER": 1, "MASTER": 2, "DIAMOND": 3}
+
+DDRAGON_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json"
+DDRAGON_ICON_URL = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champion}.png"
+CHAMPION_ICON_CACHE_DIR = "data/raw/champion_icon_cache"
 
 # Curated subset + display labels for the headline percentile comparison.
 # invert=True means a lower raw value is typically the better outcome for this role.
@@ -229,28 +240,76 @@ def build_role_payload(
     }
 
 
+def build_curves_for_role_df(role_df: pd.DataFrame) -> dict:
+    feature_curves = {}
+    quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
+    for column, _, _ in HEADLINE_FEATURES:
+        series = role_df[column].dropna()
+        if series.empty:
+            continue
+        feature_curves[column] = {
+            "ref_avg": round(float(series.mean()), 3),
+            "n": int(len(series)),
+            "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
+        }
+    return feature_curves
+
+
 def build_reference_curves(df: pd.DataFrame, tiers: list[str]) -> dict:
     reference: dict[str, dict] = {}
-    for role in VALID_ROLES:
+    for role in list(VALID_ROLES) + [ALL_ROLES_KEY]:
         reference[role] = {}
+        role_df = df if role == ALL_ROLES_KEY else df[df["teamPosition"] == role]
         for tier in tiers:
-            tier_role_df = df[(df["tier"] == tier) & (df["teamPosition"] == role)]
+            tier_role_df = role_df[role_df["tier"] == tier]
             if len(tier_role_df) < MIN_REFERENCE_SAMPLE:
                 continue
-            feature_curves = {}
-            quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
-            for column, _, _ in HEADLINE_FEATURES:
-                series = tier_role_df[column].dropna()
-                if series.empty:
-                    continue
-                feature_curves[column] = {
-                    "ref_avg": round(float(series.mean()), 3),
-                    "n": int(len(series)),
-                    "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
-                }
+            feature_curves = build_curves_for_role_df(tier_role_df)
             if feature_curves:
                 reference[role][tier] = feature_curves
     return reference
+
+
+def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
+    """Base64 data-URI icons for the given champion names, fetched from Data Dragon and
+    cached on disk. Embedding as data URIs is required because the dashboard, once
+    published as an Artifact, runs under a CSP that blocks image requests to external
+    hosts -- only same-document data: URIs work.
+    """
+    icons: dict[str, str] = {}
+    if not champion_names:
+        return icons
+
+    os.makedirs(CHAMPION_ICON_CACHE_DIR, exist_ok=True)
+
+    version = None
+    try:
+        response = requests.get(DDRAGON_VERSIONS_URL, timeout=10)
+        response.raise_for_status()
+        version = response.json()[0]
+    except Exception as exc:
+        print(f"Warning: couldn't fetch Data Dragon version ({exc}); using any cached icons only.")
+
+    for champion in sorted(champion_names):
+        cache_path = os.path.join(CHAMPION_ICON_CACHE_DIR, f"{champion}.png")
+        if not os.path.exists(cache_path) and version:
+            url = DDRAGON_ICON_URL.format(version=version, champion=champion)
+            try:
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    with open(cache_path, "wb") as outfile:
+                        outfile.write(response.content)
+                else:
+                    print(f"  no Data Dragon icon for '{champion}' (status {response.status_code})")
+            except Exception as exc:
+                print(f"  failed to fetch icon for '{champion}': {exc}")
+
+        if os.path.exists(cache_path):
+            with open(cache_path, "rb") as infile:
+                encoded = base64.b64encode(infile.read()).decode("ascii")
+            icons[champion] = f"data:image/png;base64,{encoded}"
+
+    return icons
 
 
 def run(args: argparse.Namespace) -> None:
@@ -276,7 +335,10 @@ def run(args: argparse.Namespace) -> None:
     my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
     my_df = my_df.sort_values("gameCreation", ascending=False).reset_index(drop=True)
 
-    tiers = sorted(t for t in df["tier"].unique() if t != "UNKNOWN")
+    tiers = sorted(
+        (t for t in df["tier"].unique() if t != "UNKNOWN"),
+        key=lambda t: TIER_RANK.get(t, len(TIER_RANK)),
+    )
     print(f"Reference tiers with data: {tiers}")
 
     print("Building reference percentile curves...")
@@ -324,6 +386,10 @@ def run(args: argparse.Namespace) -> None:
             }
         )
 
+    print("Fetching champion icons...")
+    champion_icons = fetch_champion_icons(set(my_df["championName"].unique()))
+    print(f"  {len(champion_icons)} icon(s) available.")
+
     # Per-account summaries, for notebook/debug introspection only -- the published
     # dashboard recomputes everything it shows from the filtered `games` list directly.
     accounts_summary = {}
@@ -346,6 +412,7 @@ def run(args: argparse.Namespace) -> None:
         "k_options": K_OPTIONS,
         "tiers": tiers,
         "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
+        "champion_icons": champion_icons,
         "reference": reference,
         "roles": {
             role: {
