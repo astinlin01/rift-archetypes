@@ -69,13 +69,24 @@ def infer_tier_for_row(path_fallback_tier: str, row: dict) -> str:
     return path_fallback_tier
 
 
-def build_tier_lookup(league_entries_glob: str) -> dict[str, str]:
-    """Map puuid -> tier, scanning all matching league pool files.
+def infer_region_for_row(row: dict, path: str) -> str:
+    # fetch_league_pool.py tags "platform" on every row it saves going forward.
+    # Older files predate that (all NA1-only at the time), and filenames with no
+    # region marker are assumed NA1 too.
+    if row.get("platform"):
+        return str(row["platform"]).upper()
+    if "_kr_" in os.path.basename(path).lower():
+        return "KR"
+    return "NA1"
+
+
+def build_tier_lookup(league_entries_glob: str) -> dict[str, dict[str, str]]:
+    """Map puuid -> {"tier": ..., "region": ...}, scanning all matching league pool files.
 
     Rows from later files win on conflict (arbitrary but rare in practice --
-    a puuid should only appear in one tier's pool at collection time).
+    a puuid should only appear in one tier/region pool at collection time).
     """
-    tier_by_puuid: dict[str, str] = {}
+    info_by_puuid: dict[str, dict[str, str]] = {}
     for path in sorted(glob.glob(league_entries_glob)):
         with open(path, "r", encoding="utf-8") as infile:
             entries = json.load(infile)
@@ -86,15 +97,18 @@ def build_tier_lookup(league_entries_glob: str) -> dict[str, str]:
             puuid = row.get("puuid")
             if not puuid:
                 continue
-            tier_by_puuid[puuid] = infer_tier_for_row(path_fallback_tier, row)
-    return tier_by_puuid
+            info_by_puuid[puuid] = {
+                "tier": infer_tier_for_row(path_fallback_tier, row),
+                "region": infer_region_for_row(row, path),
+            }
+    return info_by_puuid
 
 
 def extract_participant_row(
     match_id: str,
     queue_id: int,
     participant: dict,
-    tier_by_puuid: dict[str, str],
+    info_by_puuid: dict[str, dict[str, str]],
     min_game_length_seconds: int,
 ) -> dict | None:
     team_position = participant.get("teamPosition")
@@ -109,6 +123,7 @@ def extract_participant_row(
     minutes = game_length_seconds / 60.0
 
     puuid = participant.get("puuid")
+    puuid_info = info_by_puuid.get(puuid, {})
 
     row: dict = {
         "matchId": match_id,
@@ -118,7 +133,8 @@ def extract_participant_row(
         "win": bool(participant.get("win")),
         "queueId": queue_id,
         "gameLength": game_length_seconds,
-        "tier": tier_by_puuid.get(puuid, "UNKNOWN"),
+        "tier": puuid_info.get("tier", "UNKNOWN"),
+        "region": puuid_info.get("region", "UNKNOWN"),
     }
 
     for field in ALL_FEATURE_FIELDS:
@@ -132,7 +148,7 @@ def extract_participant_row(
 
 def build_feature_rows(
     matches_path: str,
-    tier_by_puuid: dict[str, str],
+    info_by_puuid: dict[str, dict[str, str]],
     min_game_length_seconds: int,
 ) -> list[dict]:
     rows: list[dict] = []
@@ -147,7 +163,7 @@ def build_feature_rows(
 
         for participant in participants:
             row = extract_participant_row(
-                match_id, queue_id, participant, tier_by_puuid, min_game_length_seconds
+                match_id, queue_id, participant, info_by_puuid, min_game_length_seconds
             )
             if row is not None:
                 rows.append(row)
@@ -162,6 +178,8 @@ def print_sanity_report(df: pd.DataFrame) -> None:
     print(df["teamPosition"].value_counts())
     print("\nRows by tier:")
     print(df["tier"].value_counts())
+    print("\nRows by region:")
+    print(df["region"].value_counts())
 
     feature_columns = [field.name for field in ALL_FEATURE_FIELDS]
     nan_counts = df[feature_columns].isna().sum()
@@ -177,10 +195,10 @@ def run(args: argparse.Namespace) -> None:
     if not os.path.exists(args.matches_path):
         raise FileNotFoundError(f"Matches file not found: {args.matches_path}")
 
-    tier_by_puuid = build_tier_lookup(args.league_entries_glob)
-    print(f"Loaded tier lookup for {len(tier_by_puuid)} puuids.")
+    info_by_puuid = build_tier_lookup(args.league_entries_glob)
+    print(f"Loaded tier/region lookup for {len(info_by_puuid)} puuids.")
 
-    rows = build_feature_rows(args.matches_path, tier_by_puuid, args.min_game_length_seconds)
+    rows = build_feature_rows(args.matches_path, info_by_puuid, args.min_game_length_seconds)
     df = pd.DataFrame(rows)
 
     print_sanity_report(df)

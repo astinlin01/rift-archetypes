@@ -46,6 +46,8 @@ ALL_ROLES_KEY = "ALL"
 # Highest-to-lowest, so the "Compare vs." dropdown reads Challenger > Grandmaster >
 # Master > Diamond instead of alphabetically.
 TIER_RANK = {"CHALLENGER": 0, "GRANDMASTER": 1, "MASTER": 2, "DIAMOND": 3}
+REGION_RANK = {"NA1": 0, "KR": 1}
+REGION_DISPLAY_NAMES = {"NA1": "NA"}
 
 DDRAGON_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json"
 DDRAGON_ICON_URL = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champion}.png"
@@ -255,18 +257,23 @@ def build_curves_for_role_df(role_df: pd.DataFrame) -> dict:
     return feature_curves
 
 
-def build_reference_curves(df: pd.DataFrame, tiers: list[str]) -> dict:
+def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str]) -> dict:
     reference: dict[str, dict] = {}
     for role in list(VALID_ROLES) + [ALL_ROLES_KEY]:
         reference[role] = {}
         role_df = df if role == ALL_ROLES_KEY else df[df["teamPosition"] == role]
-        for tier in tiers:
-            tier_role_df = role_df[role_df["tier"] == tier]
-            if len(tier_role_df) < MIN_REFERENCE_SAMPLE:
-                continue
-            feature_curves = build_curves_for_role_df(tier_role_df)
-            if feature_curves:
-                reference[role][tier] = feature_curves
+        for region in regions:
+            region_role_df = role_df[role_df["region"] == region]
+            region_curves = {}
+            for tier in tiers:
+                tier_role_df = region_role_df[region_role_df["tier"] == tier]
+                if len(tier_role_df) < MIN_REFERENCE_SAMPLE:
+                    continue
+                feature_curves = build_curves_for_role_df(tier_role_df)
+                if feature_curves:
+                    region_curves[tier] = feature_curves
+            if region_curves:
+                reference[role][region] = region_curves
     return reference
 
 
@@ -339,10 +346,15 @@ def run(args: argparse.Namespace) -> None:
         (t for t in df["tier"].unique() if t != "UNKNOWN"),
         key=lambda t: TIER_RANK.get(t, len(TIER_RANK)),
     )
+    regions = sorted(
+        (r for r in df["region"].unique() if r != "UNKNOWN"),
+        key=lambda r: REGION_RANK.get(r, len(REGION_RANK)),
+    )
     print(f"Reference tiers with data: {tiers}")
+    print(f"Reference regions with data: {regions}")
 
     print("Building reference percentile curves...")
-    reference = build_reference_curves(df, tiers)
+    reference = build_reference_curves(df, regions, tiers)
 
     roles_payload = {}
     games_by_role_index: dict[str, list[int]] = {role: [] for role in VALID_ROLES}
@@ -411,6 +423,8 @@ def run(args: argparse.Namespace) -> None:
         "accounts_summary": accounts_summary,
         "k_options": K_OPTIONS,
         "tiers": tiers,
+        "regions": regions,
+        "region_display_names": REGION_DISPLAY_NAMES,
         "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
         "champion_icons": champion_icons,
         "reference": reference,

@@ -368,6 +368,10 @@
     <select id="filter-champion"></select>
   </div>
   <div class="filter-field">
+    <label for="filter-region">Region</label>
+    <select id="filter-region"></select>
+  </div>
+  <div class="filter-field">
     <label for="filter-tier">Compare vs.</label>
     <select id="filter-tier"></select>
   </div>
@@ -514,8 +518,11 @@
   var windowSelect = document.getElementById('filter-window');
   var roleSelect = document.getElementById('filter-role');
   var championSelect = document.getElementById('filter-champion');
+  var regionSelect = document.getElementById('filter-region');
   var tierSelect = document.getElementById('filter-tier');
   var kSelect = document.getElementById('filter-k');
+  var REGION_DISPLAY_NAMES = DATA.region_display_names || {};
+  function regionLabel(region) { return REGION_DISPLAY_NAMES[region] || region; }
 
   DATA.accounts.forEach(function (riotId) {
     var opt = document.createElement('option');
@@ -582,11 +589,32 @@
     championSelect.value = (champions.indexOf(previous) !== -1) ? previous : 'ALL';
   }
 
+  function regionsForRole(role) {
+    var ref = DATA.reference[role] || {};
+    return DATA.regions.filter(function (r) { return ref[r]; });
+  }
+
+  function refreshRegionOptions() {
+    var role = roleSelect.value;
+    var previous = regionSelect.value;
+    regionSelect.innerHTML = '';
+    var available = regionsForRole(role);
+    available.forEach(function (region) {
+      var opt = document.createElement('option');
+      opt.value = region;
+      opt.textContent = regionLabel(region);
+      regionSelect.appendChild(opt);
+    });
+    regionSelect.value = (available.indexOf(previous) !== -1) ? previous : available[0];
+  }
+
   function refreshTierOptions() {
     var role = roleSelect.value;
+    var region = regionSelect.value;
     var previous = tierSelect.value;
     tierSelect.innerHTML = '';
-    var available = DATA.tiers.filter(function (t) { return DATA.reference[role] && DATA.reference[role][t]; });
+    var ref = (DATA.reference[role] && DATA.reference[role][region]) || {};
+    var available = DATA.tiers.filter(function (t) { return ref[t]; });
     available.forEach(function (tier) {
       var opt = document.createElement('option');
       opt.value = tier;
@@ -602,16 +630,23 @@
 
   refreshRoleOptions();
   refreshChampionOptions();
+  refreshRegionOptions();
   refreshTierOptions();
 
   accountSelect.addEventListener('change', function () {
     refreshRoleOptions();
     refreshChampionOptions();
+    refreshRegionOptions();
     refreshTierOptions();
     renderAll();
   });
   roleSelect.addEventListener('change', function () {
     refreshChampionOptions();
+    refreshRegionOptions();
+    refreshTierOptions();
+    renderAll();
+  });
+  regionSelect.addEventListener('change', function () {
     refreshTierOptions();
     renderAll();
   });
@@ -625,6 +660,7 @@
       windowSize: parseInt(windowSelect.value, 10),
       role: roleSelect.value,
       champion: championSelect.value,
+      region: regionSelect.value,
       tier: tierSelect.value,
       k: kSelect.value
     };
@@ -662,7 +698,7 @@
         bad: scopedWinRate !== null && scopedWinRate < 0.5
       },
       { label: 'Selected scope', value: scopeLabel, foot: champGames.length + ' of ' + windowGames.length + ' games in window' },
-      { label: 'Comparing vs.', value: filters.tier ? titleCase(filters.tier) : '—', foot: 'reference tier' }
+      { label: 'Comparing vs.', value: filters.tier ? titleCase(filters.tier) + ' ' + regionLabel(filters.region) : '—', foot: 'reference tier' }
     ];
     var kpiRow = document.getElementById('kpi-row');
     kpiRow.innerHTML = '';
@@ -684,11 +720,13 @@
   function renderPercentiles(filters, champGames) {
     var container = document.getElementById('divbars');
     container.innerHTML = '';
-    var refForRoleTier = DATA.reference[filters.role] && DATA.reference[filters.role][filters.tier];
+    var regionRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region];
+    var refForRoleTier = regionRef && regionRef[filters.tier];
     var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    var tierLabel = titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region);
 
     document.getElementById('percentiles-sub').textContent =
-      'Your ' + scopeLabel + ' average in the current window against ' + titleCase(filters.tier || '—') +
+      'Your ' + scopeLabel + ' average in the current window against ' + tierLabel +
       ' ' + roleLabel(filters.role) + ' players, by performance percentile.';
 
     if (!champGames.length) {
@@ -696,7 +734,7 @@
       return;
     }
     if (!refForRoleTier) {
-      container.innerHTML = '<div class="empty-state">Not enough ' + titleCase(filters.tier || '') + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
+      container.innerHTML = '<div class="empty-state">Not enough ' + tierLabel + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
       return;
     }
 
@@ -730,7 +768,7 @@
       var tooltipHtml =
         '<div class="tt-title">' + f.label + '</div>' +
         '<div class="tt-row"><span>You</span><strong>' + fmt(yourAvg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>' + titleCase(filters.tier) + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
+        '<div class="tt-row"><span>' + tierLabel + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
         '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(displayPercentile, 0) + '</strong></div>';
 
       fillBar.addEventListener('pointerenter', function (e) { showTooltip(e, tooltipHtml); });

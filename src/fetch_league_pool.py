@@ -92,6 +92,12 @@ def fetch_player_pool(args: argparse.Namespace) -> None:
 
     all_entries = dedupe_by_puuid(all_entries)
 
+    # Tag each row with its source platform so downstream steps (build_features.py) can
+    # attribute region alongside tier -- top-tier league payloads don't carry this
+    # otherwise, and even paged entries don't carry it explicitly.
+    for row in all_entries:
+        row["platform"] = args.platform.upper()
+
     if args.positive_winrate_only:
         before = len(all_entries)
         all_entries = [row for row in all_entries if int(row.get("wins", 0)) > int(row.get("losses", 0))]

@@ -1,6 +1,12 @@
 """
 Stage B: fetch full match payloads from deduped match IDs.
 
+match_ids.ndjson can hold match IDs from multiple regions at once (they're globally
+unique, platform-prefixed, e.g. "KR_..." vs "NA1_..."), but Riot's match-v5 API only
+resolves a match through the regional cluster its platform actually routes to (a KR
+match 404s via the "americas" cluster). So this script auto-detects the right cluster
+per match ID from its prefix rather than using one client for the whole run.
+
 Run from repo root:
     python src/fetch_match_details.py
 """
@@ -21,12 +27,28 @@ from pipeline_io import (
     save_json_atomic,
     utc_now_iso,
 )
-from riot_client import RiotClient
+from riot_client import PLATFORM_TO_REGION, RiotClient
+
+# Any platform that routes to each region, used only to construct a client for that
+# region's regional-routing base URL -- the platform choice itself doesn't matter for
+# match-v5 lookups, only the resulting `region` attribute does.
+REPRESENTATIVE_PLATFORM_BY_REGION = {}
+for _platform, _region in PLATFORM_TO_REGION.items():
+    REPRESENTATIVE_PLATFORM_BY_REGION.setdefault(_region, _platform)
+
+
+def region_for_match_id(match_id: str, fallback_platform: str) -> str:
+    prefix = match_id.split("_", 1)[0].lower()
+    return PLATFORM_TO_REGION.get(prefix, PLATFORM_TO_REGION[fallback_platform])
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch full Riot match payloads from match IDs.")
-    parser.add_argument("--platform", default="na1")
+    parser.add_argument(
+        "--platform",
+        default="na1",
+        help="Fallback platform for match IDs whose prefix doesn't map to a known platform.",
+    )
     parser.add_argument("--match-ids-path", default="data/raw/match_ids.ndjson")
     parser.add_argument("--output-path", default="data/raw/matches.ndjson")
     parser.add_argument("--checkpoint-path", default="data/raw/checkpoints/match_details_checkpoint.json")
@@ -95,7 +117,13 @@ def run(args: argparse.Namespace) -> None:
         if ndjson_file_exists(args.output_path):
             fetched_set = collect_match_ids_from_matches_ndjson(args.output_path)
 
-    client = RiotClient(platform=args.platform)
+    clients_by_region: dict[str, RiotClient] = {}
+
+    def client_for_match(match_id: str) -> RiotClient:
+        region = region_for_match_id(match_id, args.platform)
+        if region not in clients_by_region:
+            clients_by_region[region] = RiotClient(platform=REPRESENTATIVE_PLATFORM_BY_REGION[region])
+        return clients_by_region[region]
 
     fetched_count = 0
     failed_count = 0
@@ -109,7 +137,7 @@ def run(args: argparse.Namespace) -> None:
         print(f"[{idx + 1}/{len(match_ids)}] Fetching match {match_id}...")
 
         try:
-            match_payload = client.get_match(match_id)
+            match_payload = client_for_match(match_id).get_match(match_id)
         except requests.HTTPError as http_error:
             failed_count += 1
             status_code = status_code_from_http_error(http_error)

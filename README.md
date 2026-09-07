@@ -59,7 +59,7 @@ Important behavior:
 - Dedupes match IDs globally.
 
 ### src/fetch_match_details.py
-Reads `match_ids.ndjson` and fetches full match payloads.
+Reads `match_ids.ndjson` and fetches full match payloads. Auto-routes each match ID to the correct regional cluster based on its platform prefix (`KR_...` -> `asia`, `NA1_...` -> `americas`, etc.) -- match-v5 lookups 404 through the wrong cluster, so a single run safely handles a `match_ids.ndjson` that mixes regions. `--platform` is only a fallback for an unrecognized prefix.
 
 Outputs:
 - `data/raw/matches.ndjson`
@@ -91,7 +91,7 @@ Builds the per-participant feature table used for clustering.
 
 - Drops non-solo-role rows (keeps `TOP`/`JUNGLE`/`MIDDLE`/`BOTTOM`/`UTILITY` only) and remakes/early-surrenders shorter than `--min-game-length-seconds` (default 5 min).
 - Applies per-minute normalization from `feature_config.py`.
-- Attaches source tier per puuid by matching against all `data/raw/league_entries*.json` pool files.
+- Attaches source tier **and region** per puuid by matching against all `data/raw/league_entries*.json` pool files (`fetch_league_pool.py` tags every saved row with `platform`; files predating that default to NA1).
 - Output: `data/processed/participant_features.parquet`
 - Run: `python src/build_features.py`
 
@@ -128,8 +128,11 @@ Dashboard filters:
 - **Game window** -- last 20 / last 50 / all time.
 - **Role** -- any role you have games in, or "All Roles" for an overall (non-role-specific) view -- the percentile chart still works there (aggregated across roles), but the archetype cards and cluster-space scatter require picking a specific role, since clustering is fit separately per role.
 - **Champion** -- narrow to one champion within the selected role, or all champions.
-- **Compare vs.** -- reference tier, ordered Challenger > Grandmaster > Master > Diamond (whichever tiers have enough sample size for that role).
+- **Region** -- which platform's ranked population to compare against (NA, KR, ...; only regions with enough sample size for the selected role are offered).
+- **Compare vs.** -- reference tier within the selected region, ordered Challenger > Grandmaster > Master > Diamond (whichever tiers have enough sample size).
 - **Playstyles (k)** -- 3 to 6 clusters; cards, scatter colors, legend, and table archetypes all update together.
+
+Note: clustering (archetype cards, cluster-space scatter) is fit on the **combined** population across all regions for a role -- it isn't split by region. Only the percentile-comparison reference curves are region-specific.
 
 Each archetype card shows two comparisons against the population: your win rate within that cluster, and your *share* of games landing in it (over/under-represented vs. the population's own distribution across clusters).
 
@@ -141,17 +144,19 @@ Note: cluster counts here are fit fresh per k on the same per-role PCA space pur
 
 ## Typical run order
 
-1. Build pool (one file per tier -- `build_features.py` infers tier from the filename for apex tiers, so don't merge them into one file)
+1. Build pool (one file per tier *and* per region -- `build_features.py` infers tier from the filename for apex tiers, so don't merge tiers into one file; `fetch_league_pool.py` tags every row with its `--platform` so region is never ambiguous even if you do)
 - `python src/fetch_league_pool.py --tier DIAMOND --division II`
 - `python src/fetch_league_pool.py --tier MASTER --output-path data/raw/league_entries_master.json`
 - `python src/fetch_league_pool.py --tier GRANDMASTER --output-path data/raw/league_entries_grandmaster.json`
 - `python src/fetch_league_pool.py --tier CHALLENGER --output-path data/raw/league_entries_challenger.json`
+- For another region, add `--platform <region>` and a matching filename, e.g.: `python src/fetch_league_pool.py --platform kr --tier CHALLENGER --output-path data/raw/league_entries_kr_challenger.json`
 
-2. Collect match IDs (once per tier file -- `fetch_match_ids.py` only reads one `--league-entries-path` per run; add `--skip-default-riot-ids` on the non-Diamond runs to avoid redundantly re-resolving your own accounts each time). Master/Grandmaster pools can be huge (Master was 10,000 players on NA1) -- cap with `--max-players` to keep runtime and dataset size proportionate to the other tiers.
+2. Collect match IDs (once per pool file -- `fetch_match_ids.py` only reads one `--league-entries-path` per run; pass the matching `--platform` for non-NA files, and add `--skip-default-riot-ids` on the non-Diamond runs to avoid redundantly re-resolving your own accounts each time). Master/Grandmaster pools can be huge (NA and KR Master were both 10,000 players, the API's page cap) -- cap with `--max-players` to keep runtime and dataset size proportionate to the other tiers. Match IDs are globally unique across regions (platform-prefixed, e.g. `KR_...` vs `NA1_...`), so every region can share the same `match_ids.ndjson`/`matches.ndjson`.
 - `python src/fetch_match_ids.py --resume`
 - `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_master.json --max-players 300 --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_master_checkpoint.json`
 - `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_grandmaster.json --max-players 300 --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_gm_checkpoint.json`
 - `python src/fetch_match_ids.py --league-entries-path data/raw/league_entries_challenger.json --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_challenger_checkpoint.json`
+- `python src/fetch_match_ids.py --platform kr --league-entries-path data/raw/league_entries_kr_challenger.json --skip-default-riot-ids --checkpoint-path data/raw/checkpoints/match_ids_kr_challenger_checkpoint.json` (repeat per KR tier, same `--max-players` caps as above)
 
 3. Fetch match payloads
 - `python src/fetch_match_details.py --resume`
