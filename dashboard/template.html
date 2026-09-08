@@ -258,6 +258,16 @@
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
   .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
 
+  .league-toggle { display: flex; gap: 6px; }
+  .league-btn {
+    font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.02em;
+    padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink-2); cursor: pointer;
+  }
+  .league-btn.active { background: var(--accent-jade); border-color: var(--accent-jade); color: #ffffff; }
+  .league-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .pro-sample-note { font-size: 12px; color: var(--ink-muted); }
+
   /* ---------- Archetype cards ---------- */
   .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
   .arch-card { padding: 18px 18px 20px; }
@@ -395,6 +405,18 @@
         <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Underperforming</span>
       </div>
       <div class="divbars" id="divbars"></div>
+    </div>
+  </section>
+
+  <section id="section-pro">
+    <div class="section-head">
+      <div class="eyebrow">vs. Professional Play</div>
+      <h2 id="pro-heading">How you compare to the pros</h2>
+      <p id="pro-sub">Your average against pro players in the same role, from Oracle's Elixir match data. Fewer stats are available here than the solo-queue comparison above (no CC time or lane-opponent data in pro match records).</p>
+    </div>
+    <div class="panel" id="pro-panel">
+      <div class="legend-row" id="pro-league-toggle" style="justify-content:space-between;"></div>
+      <div class="divbars" id="pro-divbars"></div>
     </div>
   </section>
 
@@ -717,29 +739,10 @@
   }
 
   // ---------- Diverging bar chart ----------
-  function renderPercentiles(filters, champGames) {
-    var container = document.getElementById('divbars');
+  function renderDivBars(container, headlineFeatures, refCurves, champGames, refLabel) {
     container.innerHTML = '';
-    var regionRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region];
-    var refForRoleTier = regionRef && regionRef[filters.tier];
-    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
-    var tierLabel = titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region);
-
-    document.getElementById('percentiles-sub').textContent =
-      'Your ' + scopeLabel + ' average in the current window against ' + tierLabel +
-      ' ' + roleLabel(filters.role) + ' players, by performance percentile.';
-
-    if (!champGames.length) {
-      container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
-      return;
-    }
-    if (!refForRoleTier) {
-      container.innerHTML = '<div class="empty-state">Not enough ' + tierLabel + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
-      return;
-    }
-
-    DATA.headline_features.forEach(function (f) {
-      var curve = refForRoleTier[f.feature];
+    headlineFeatures.forEach(function (f) {
+      var curve = refCurves[f.feature];
       if (!curve) return;
       var yourAvg = mean(champGames.map(function (g) { return g.features[f.feature]; }));
       if (yourAvg === null) return;
@@ -768,7 +771,7 @@
       var tooltipHtml =
         '<div class="tt-title">' + f.label + '</div>' +
         '<div class="tt-row"><span>You</span><strong>' + fmt(yourAvg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>' + tierLabel + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
+        '<div class="tt-row"><span>' + refLabel + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
         '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(displayPercentile, 0) + '</strong></div>';
 
       fillBar.addEventListener('pointerenter', function (e) { showTooltip(e, tooltipHtml); });
@@ -789,6 +792,87 @@
       row.appendChild(value);
       container.appendChild(row);
     });
+  }
+
+  function renderPercentiles(filters, champGames) {
+    var container = document.getElementById('divbars');
+    var regionRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region];
+    var refForRoleTier = regionRef && regionRef[filters.tier];
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    var tierLabel = titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region);
+
+    document.getElementById('percentiles-sub').textContent =
+      'Your ' + scopeLabel + ' average in the current window against ' + tierLabel +
+      ' ' + roleLabel(filters.role) + ' players, by performance percentile.';
+
+    if (!champGames.length) {
+      container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
+      return;
+    }
+    if (!refForRoleTier) {
+      container.innerHTML = '<div class="empty-state">Not enough ' + tierLabel + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
+      return;
+    }
+
+    renderDivBars(container, DATA.headline_features, refForRoleTier, champGames, tierLabel);
+  }
+
+  // ---------- vs. Pro ----------
+  var proLeague = (DATA.pro_leagues && DATA.pro_leagues[0]) || null;
+
+  function renderProSection(filters, champGames) {
+    var section = document.getElementById('section-pro');
+    if (!DATA.pro_leagues || !DATA.pro_leagues.length) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    document.getElementById('pro-heading').textContent = 'How your ' + scopeLabel + ' compares to the pros';
+
+    var toggle = document.getElementById('pro-league-toggle');
+    var leagueButtons = document.createElement('div');
+    leagueButtons.className = 'league-toggle';
+    DATA.pro_leagues.forEach(function (league) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'league-btn' + (league === proLeague ? ' active' : '');
+      btn.textContent = league;
+      btn.addEventListener('click', function () {
+        proLeague = league;
+        renderAll();
+      });
+      leagueButtons.appendChild(btn);
+    });
+
+    var container = document.getElementById('pro-divbars');
+
+    if (filters.role === ALL_ROLES) {
+      toggle.innerHTML = '';
+      toggle.appendChild(leagueButtons);
+      container.innerHTML = '<div class="empty-state">Select a specific role to compare against pro players.</div>';
+      return;
+    }
+
+    var refForRoleLeague = DATA.pro_reference[filters.role] && DATA.pro_reference[filters.role][proLeague];
+    var note = document.createElement('span');
+    note.className = 'pro-sample-note';
+    note.textContent = refForRoleLeague ? 'n=' + Object.values(refForRoleLeague)[0].n + ' pro player-games' : '';
+    toggle.innerHTML = '';
+    toggle.appendChild(leagueButtons);
+    toggle.appendChild(note);
+
+    if (!champGames.length) {
+      container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
+      return;
+    }
+    if (!refForRoleLeague) {
+      container.innerHTML = '<div class="empty-state">Not enough ' + proLeague + ' ' + roleLabel(filters.role) + ' pro data to compare against.</div>';
+      return;
+    }
+
+    renderDivBars(container, DATA.pro_headline_features, refForRoleLeague, champGames, proLeague);
   }
 
   // ---------- Archetype cards ----------
@@ -1049,6 +1133,7 @@
 
     renderHeader(filters, windowGames, champGames);
     renderPercentiles(filters, champGames);
+    renderProSection(filters, champGames);
     renderArchetypes(filters, champGames);
     renderScatter(filters, champGames);
     renderTable(filters, windowGames);

@@ -53,6 +53,24 @@ DDRAGON_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json"
 DDRAGON_ICON_URL = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champion}.png"
 CHAMPION_ICON_CACHE_DIR = "data/raw/champion_icon_cache"
 
+PRO_LEAGUE_RANK = {"LCK": 0, "LPL": 1}
+
+# Subset of HEADLINE_FEATURES that Oracle's Elixir's schema has a clean equivalent for
+# (see build_pro_features.py's PRO_FEATURE_MAP-equivalent construction) -- no CC-time or
+# lane-opponent-diff data in pro match data, so those two are dropped here.
+PRO_HEADLINE_FEATURES = [
+    ("damage_per_minute", "Damage / min", False),
+    ("gold_earned_per_min", "Gold / min", False),
+    ("vision_score_per_minute", "Vision score / min", False),
+    ("kda", "KDA", False),
+    ("kill_participation", "Kill participation", False),
+    ("team_damage_pct", "Team damage share", False),
+    ("cs_per_min", "CS / min", False),
+    ("damage_taken_per_min", "Damage taken / min", True),
+    ("control_wards_per_min", "Control wards / min", False),
+    ("deaths_per_min", "Deaths / min", True),
+]
+
 # Curated subset + display labels for the headline percentile comparison.
 # invert=True means a lower raw value is typically the better outcome for this role.
 HEADLINE_FEATURES = [
@@ -96,6 +114,7 @@ def parse_args() -> argparse.Namespace:
         help="Riot ID to include, e.g. 'river3#na1'. Repeatable. Defaults to both configured accounts.",
     )
     parser.add_argument("--population-sample", type=int, default=500, help="Scatter background points per role.")
+    parser.add_argument("--pro-features-path", default="data/processed/pro_player_features.parquet")
     parser.add_argument("--output-path", default="data/processed/dashboard_data.json")
     return parser.parse_args()
 
@@ -242,10 +261,10 @@ def build_role_payload(
     }
 
 
-def build_curves_for_role_df(role_df: pd.DataFrame) -> dict:
+def build_curves_for_role_df(role_df: pd.DataFrame, headline_features=HEADLINE_FEATURES) -> dict:
     feature_curves = {}
     quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
-    for column, _, _ in HEADLINE_FEATURES:
+    for column, _, _ in headline_features:
         series = role_df[column].dropna()
         if series.empty:
             continue
@@ -255,6 +274,34 @@ def build_curves_for_role_df(role_df: pd.DataFrame) -> dict:
             "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
         }
     return feature_curves
+
+
+def build_pro_reference(pro_features_path: str) -> tuple[dict, list[str]]:
+    """Percentile reference curves per (role, league), built from Oracle's Elixir data.
+
+    Mirrors build_reference_curves' shape but keyed by league instead of region/tier,
+    and uses PRO_HEADLINE_FEATURES (a subset of our own features that has a clean
+    equivalent in Oracle's Elixir's schema -- see build_pro_features.py).
+    """
+    if not os.path.exists(pro_features_path):
+        print(f"No pro feature table found at {pro_features_path}; skipping pro comparison. Run build_pro_features.py to add it.")
+        return {}, []
+
+    pro_df = pd.read_parquet(pro_features_path)
+    leagues = sorted(pro_df["league"].unique(), key=lambda l: PRO_LEAGUE_RANK.get(l, len(PRO_LEAGUE_RANK)))
+
+    reference: dict[str, dict] = {}
+    for role in VALID_ROLES:
+        reference[role] = {}
+        role_df = pro_df[pro_df["role"] == role]
+        for league in leagues:
+            league_role_df = role_df[role_df["league"] == league]
+            if len(league_role_df) < MIN_REFERENCE_SAMPLE:
+                continue
+            feature_curves = build_curves_for_role_df(league_role_df, PRO_HEADLINE_FEATURES)
+            if feature_curves:
+                reference[role][league] = feature_curves
+    return reference, leagues
 
 
 def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str]) -> dict:
@@ -356,6 +403,9 @@ def run(args: argparse.Namespace) -> None:
     print("Building reference percentile curves...")
     reference = build_reference_curves(df, regions, tiers)
 
+    print("Building pro reference percentile curves...")
+    pro_reference, pro_leagues = build_pro_reference(args.pro_features_path)
+
     roles_payload = {}
     games_by_role_index: dict[str, list[int]] = {role: [] for role in VALID_ROLES}
     for role in VALID_ROLES:
@@ -426,8 +476,11 @@ def run(args: argparse.Namespace) -> None:
         "regions": regions,
         "region_display_names": REGION_DISPLAY_NAMES,
         "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
+        "pro_leagues": pro_leagues,
+        "pro_headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in PRO_HEADLINE_FEATURES],
         "champion_icons": champion_icons,
         "reference": reference,
+        "pro_reference": pro_reference,
         "roles": {
             role: {
                 "population_scatter": roles_payload[role]["population_scatter"],

@@ -109,6 +109,14 @@ Assigns your own matches to the fitted per-role clusters and compares your per-f
 - Run: `python src/compare_self.py --riot-id "river3#na1"` (or `--puuid <puuid>`, repeatable)
 - Output: `data/processed/self_comparison.csv`
 
+### src/build_pro_features.py
+Builds a per-player-per-game feature table from [Oracle's Elixir](https://oracleselixir.com/tools/downloads)'s professional match data CSV (LCK/LPL by default; any league code in the `league` column works via `--leagues`), for comparing your own stats against pro players. Oracle's Elixir's schema doesn't have our `challenges`-style derived stats, so only a subset of features carry a clean equivalent (no CC time, no lane-opponent-diff data) -- see `PRO_FEATURE_MAP`-equivalent construction in the script for exactly which fields map to what.
+
+Their download is Google Drive-hosted and its anonymous-download quota is sometimes exhausted for a while (a known bottleneck given how popular the dataset is) -- if `gdown <file-id>` fails with a quota error, download the file manually in a logged-in browser instead and place it at `--input-path`.
+
+- Run: `python src/build_pro_features.py`
+- Output: `data/processed/pro_player_features.parquet`
+
 ## Notebooks
 
 All scripts in `src/` are runnable interactively from `notebooks/` -- each notebook cell
@@ -140,7 +148,9 @@ Champion icons are fetched from Data Dragon at export time, cached under `data/r
 
 Note: cluster counts here are fit fresh per k on the same per-role PCA space purely for the dashboard's slider -- they don't change or replace the "official" per-role models in `models/` that `compare_self.py` uses (those keep whatever k `build_clusters.py`'s silhouette search picked).
 
-- Run: `python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"` (repeatable; defaults to both configured accounts) then `python src/build_dashboard.py`
+A separate **"vs. Professional Play"** section compares you against LCK/LPL pro players (a league toggle switches between them), built from `build_pro_features.py`'s output if present -- the section hides itself entirely if that file hasn't been built yet. It uses a smaller feature set than the solo-queue comparison (see `build_pro_features.py`) since Oracle's Elixir's schema doesn't cover everything Riot's match-v5 API does.
+
+- Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"` (repeatable; defaults to both configured accounts) then `python src/build_dashboard.py`
 
 ## Typical run order
 
