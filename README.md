@@ -150,6 +150,8 @@ Note: cluster counts here are fit fresh per k on the same per-role PCA space pur
 
 A separate **"vs. Professional Play"** section compares you against LCK/LPL pro players (a league toggle switches between them), built from `build_pro_features.py`'s output if present -- the section hides itself entirely if that file hasn't been built yet. It uses a smaller feature set than the solo-queue comparison (see `build_pro_features.py`) since Oracle's Elixir's schema doesn't cover everything Riot's match-v5 API does.
 
+Below that, **"Which pro do you play like?"** finds your nearest pro player match: each qualifying pro (5+ games in a role this season) gets a season-average stat profile, standardized against the pro population's own mean/std per feature; your current stat profile (respecting every active filter -- account, window, role, champion) is standardized the same way and compared by Euclidean distance to find the 3 closest pros in the selected league. This runs entirely client-side in the published dashboard -- no server-side matching step.
+
 - Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"` (repeatable; defaults to both configured accounts) then `python src/build_dashboard.py`
 
 ## Typical run order

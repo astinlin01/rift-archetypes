@@ -287,6 +287,16 @@
   .arch-compare .your-wr.under { color: var(--div-neg); }
   .arch-compare .label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
+  .pro-match-card { padding: 16px 18px 18px; }
+  .pro-match-rank { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 13px; color: var(--accent-jade); }
+  .pro-match-card h3 { font-size: 17px; margin-top: 3px; }
+  .pro-match-meta { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .pro-match-sim { margin-top: 12px; display: flex; align-items: baseline; gap: 8px; }
+  .pro-match-sim .n { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 24px; }
+  .pro-match-sim .of { font-size: 12px; color: var(--ink-muted); }
+  .pro-match-champs { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .pro-match-champ { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); background: var(--surface-2); border-radius: 999px; padding: 3px 9px 3px 4px; }
+
   /* ---------- Scatter ---------- */
   .scatter-panel { padding: 18px; }
   .scatter-svg { width: 100%; height: auto; display: block; overflow: visible; }
@@ -418,6 +428,12 @@
       <div class="legend-row" id="pro-league-toggle" style="justify-content:space-between;"></div>
       <div class="divbars" id="pro-divbars"></div>
     </div>
+
+    <div class="section-head" style="margin-top:36px;">
+      <h3 id="pro-match-heading" style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:19px;">Which pro do you play like?</h3>
+      <p id="pro-match-sub" style="color:var(--ink-2);margin-top:6px;font-size:13.5px;">Nearest pro players by season-average stat profile (standardized against the pro population, Euclidean distance across the same stats as the chart above).</p>
+    </div>
+    <div class="card-grid" id="pro-match-grid"></div>
   </section>
 
   <section id="section-archetypes">
@@ -852,6 +868,7 @@
       toggle.innerHTML = '';
       toggle.appendChild(leagueButtons);
       container.innerHTML = '<div class="empty-state">Select a specific role to compare against pro players.</div>';
+      renderProMatches(filters, champGames);
       return;
     }
 
@@ -865,14 +882,87 @@
 
     if (!champGames.length) {
       container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
-      return;
-    }
-    if (!refForRoleLeague) {
+    } else if (!refForRoleLeague) {
       container.innerHTML = '<div class="empty-state">Not enough ' + proLeague + ' ' + roleLabel(filters.role) + ' pro data to compare against.</div>';
+    } else {
+      renderDivBars(container, DATA.pro_headline_features, refForRoleLeague, champGames, proLeague);
+    }
+
+    renderProMatches(filters, champGames);
+  }
+
+  var PRO_MATCH_COUNT = 3;
+
+  function renderProMatches(filters, champGames) {
+    var grid = document.getElementById('pro-match-grid');
+    var heading = document.getElementById('pro-match-heading');
+    grid.innerHTML = '';
+
+    if (filters.role === ALL_ROLES) {
+      heading.textContent = 'Which pro do you play like?';
+      grid.innerHTML = '<div class="empty-state">Select a specific role to find your nearest pro match.</div>';
       return;
     }
 
-    renderDivBars(container, DATA.pro_headline_features, refForRoleLeague, champGames, proLeague);
+    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+    heading.textContent = 'Which ' + proLeague + ' pro does your ' + scopeLabel + ' play like?';
+
+    var profile = DATA.pro_player_profiles && DATA.pro_player_profiles[filters.role];
+    if (!profile) {
+      grid.innerHTML = '<div class="empty-state">No pro player profiles available for this role.</div>';
+      return;
+    }
+    if (!champGames.length) {
+      grid.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
+      return;
+    }
+
+    var featureCols = Object.keys(profile.mean);
+    var yourZ = {};
+    var missingFeature = false;
+    featureCols.forEach(function (col) {
+      var avg = mean(champGames.map(function (g) { return g.features[col]; }));
+      if (avg === null) { missingFeature = true; return; }
+      var std = profile.std[col] || 1;
+      yourZ[col] = (avg - profile.mean[col]) / std;
+    });
+    if (missingFeature) {
+      grid.innerHTML = '<div class="empty-state">Not enough stat coverage in this window to compute a match.</div>';
+      return;
+    }
+
+    var candidates = profile.players.filter(function (p) { return p.league === proLeague; });
+    if (!candidates.length) {
+      grid.innerHTML = '<div class="empty-state">No qualifying ' + proLeague + ' ' + roleLabel(filters.role) + ' players (min games threshold not met).</div>';
+      return;
+    }
+
+    var ranked = candidates.map(function (p) {
+      var distSq = 0;
+      featureCols.forEach(function (col) {
+        var diff = yourZ[col] - p.z[col];
+        distSq += diff * diff;
+      });
+      return { player: p, distance: Math.sqrt(distSq) };
+    }).sort(function (a, b) { return a.distance - b.distance; }).slice(0, PRO_MATCH_COUNT);
+
+    ranked.forEach(function (entry, rank) {
+      var p = entry.player;
+      var similarity = Math.round(100 / (1 + entry.distance));
+      var card = document.createElement('div');
+      card.className = 'panel pro-match-card';
+      var champChips = p.top_champs.map(function (champ) {
+        var icon = championIconImg(champ, 'sm');
+        return '<span class="pro-match-champ">' + (icon ? icon.outerHTML : '') + champ + '</span>';
+      }).join('');
+      card.innerHTML =
+        '<div class="pro-match-rank">MATCH ' + (rank + 1) + '</div>' +
+        '<h3>' + p.name + '</h3>' +
+        '<div class="pro-match-meta">' + p.team + ' · ' + p.league + '</div>' +
+        '<div class="pro-match-sim"><span class="n mono">' + similarity + '%</span><span class="of">similarity · ' + p.games + ' games, ' + pct(p.win_rate * 100) + ' WR</span></div>' +
+        '<div class="pro-match-champs">' + champChips + '</div>';
+      grid.appendChild(card);
+    });
   }
 
   // ---------- Archetype cards ----------

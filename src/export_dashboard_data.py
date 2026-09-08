@@ -54,6 +54,7 @@ DDRAGON_ICON_URL = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champi
 CHAMPION_ICON_CACHE_DIR = "data/raw/champion_icon_cache"
 
 PRO_LEAGUE_RANK = {"LCK": 0, "LPL": 1}
+MIN_PRO_PLAYER_GAMES = 5  # skip a pro player from the "which pro do you play like" list below this
 
 # Subset of HEADLINE_FEATURES that Oracle's Elixir's schema has a clean equivalent for
 # (see build_pro_features.py's PRO_FEATURE_MAP-equivalent construction) -- no CC-time or
@@ -276,18 +277,20 @@ def build_curves_for_role_df(role_df: pd.DataFrame, headline_features=HEADLINE_F
     return feature_curves
 
 
-def build_pro_reference(pro_features_path: str) -> tuple[dict, list[str]]:
+def load_pro_features(pro_features_path: str) -> pd.DataFrame | None:
+    if not os.path.exists(pro_features_path):
+        print(f"No pro feature table found at {pro_features_path}; skipping pro comparison. Run build_pro_features.py to add it.")
+        return None
+    return pd.read_parquet(pro_features_path)
+
+
+def build_pro_reference(pro_df: pd.DataFrame) -> tuple[dict, list[str]]:
     """Percentile reference curves per (role, league), built from Oracle's Elixir data.
 
     Mirrors build_reference_curves' shape but keyed by league instead of region/tier,
     and uses PRO_HEADLINE_FEATURES (a subset of our own features that has a clean
     equivalent in Oracle's Elixir's schema -- see build_pro_features.py).
     """
-    if not os.path.exists(pro_features_path):
-        print(f"No pro feature table found at {pro_features_path}; skipping pro comparison. Run build_pro_features.py to add it.")
-        return {}, []
-
-    pro_df = pd.read_parquet(pro_features_path)
     leagues = sorted(pro_df["league"].unique(), key=lambda l: PRO_LEAGUE_RANK.get(l, len(PRO_LEAGUE_RANK)))
 
     reference: dict[str, dict] = {}
@@ -302,6 +305,56 @@ def build_pro_reference(pro_features_path: str) -> tuple[dict, list[str]]:
             if feature_curves:
                 reference[role][league] = feature_curves
     return reference, leagues
+
+
+def build_pro_player_profiles(pro_df: pd.DataFrame) -> dict:
+    """Per-pro-player season-average stat profiles per role, standardized against the
+    pro population's own scale, for a client-side "which pro do you play like" nearest-
+    neighbor match. A player's team/league label uses whichever they played the most
+    games under this season (handles a mid-split team change without splitting them
+    into two entries).
+    """
+    feature_cols = [c for c, _, _ in PRO_HEADLINE_FEATURES]
+    profiles: dict[str, dict] = {}
+
+    for role in VALID_ROLES:
+        role_df = pro_df[pro_df["role"] == role]
+        if role_df.empty:
+            continue
+
+        mean = role_df[feature_cols].mean()
+        std = role_df[feature_cols].std(ddof=0).replace(0, 1.0)
+
+        players = []
+        for player_name, player_df in role_df.groupby("playername"):
+            if len(player_df) < MIN_PRO_PLAYER_GAMES:
+                continue
+            representative_team = player_df["teamname"].value_counts().idxmax()
+            representative_league = player_df["league"].value_counts().idxmax()
+            raw_avg = player_df[feature_cols].mean()
+            z = (raw_avg - mean) / std
+            top_champs = player_df["champion"].value_counts().head(3).index.tolist()
+
+            players.append(
+                {
+                    "name": player_name,
+                    "team": representative_team,
+                    "league": representative_league,
+                    "games": int(len(player_df)),
+                    "win_rate": round(float(player_df["win"].mean()), 3),
+                    "top_champs": top_champs,
+                    "z": {col: round(float(z[col]), 4) for col in feature_cols},
+                }
+            )
+
+        if players:
+            profiles[role] = {
+                "mean": {col: round(float(mean[col]), 4) for col in feature_cols},
+                "std": {col: round(float(std[col]), 4) for col in feature_cols},
+                "players": players,
+            }
+
+    return profiles
 
 
 def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str]) -> dict:
@@ -403,8 +456,14 @@ def run(args: argparse.Namespace) -> None:
     print("Building reference percentile curves...")
     reference = build_reference_curves(df, regions, tiers)
 
-    print("Building pro reference percentile curves...")
-    pro_reference, pro_leagues = build_pro_reference(args.pro_features_path)
+    pro_df = load_pro_features(args.pro_features_path)
+    if pro_df is not None:
+        print("Building pro reference percentile curves...")
+        pro_reference, pro_leagues = build_pro_reference(pro_df)
+        print("Building pro player profiles for nearest-match comparison...")
+        pro_player_profiles = build_pro_player_profiles(pro_df)
+    else:
+        pro_reference, pro_leagues, pro_player_profiles = {}, [], {}
 
     roles_payload = {}
     games_by_role_index: dict[str, list[int]] = {role: [] for role in VALID_ROLES}
@@ -481,6 +540,7 @@ def run(args: argparse.Namespace) -> None:
         "champion_icons": champion_icons,
         "reference": reference,
         "pro_reference": pro_reference,
+        "pro_player_profiles": pro_player_profiles,
         "roles": {
             role: {
                 "population_scatter": roles_payload[role]["population_scatter"],
