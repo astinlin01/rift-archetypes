@@ -123,6 +123,15 @@ def build_comparison_rows(
     return rows
 
 
+def filter_to_current_season(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only rows from the season the reference pool was played in (see current_season)."""
+    season = current_season(df)
+    if season is None:
+        return df
+    print(f"Season-matched to season {season}.")
+    return df[df["season"] == season].reset_index(drop=True)
+
+
 def run(args: argparse.Namespace) -> None:
     if not os.path.exists(args.features_path):
         raise FileNotFoundError(
@@ -135,10 +144,7 @@ def run(args: argparse.Namespace) -> None:
     print(f"Comparing {len(puuids)} account(s).")
 
     df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
-    season = current_season(df)
-    if season is not None:
-        df = df[df["season"] == season].reset_index(drop=True)
-        print(f"Season-matched to season {season}.")
+    df = filter_to_current_season(df)
     my_df = df[df["puuid"].isin(puuids)]
     reference_df = df[df["tier"] == args.reference_tier.upper()]
 
