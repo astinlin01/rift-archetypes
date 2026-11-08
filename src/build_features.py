@@ -20,10 +20,14 @@ import pandas as pd
 
 from feature_config import (
     ALL_FEATURE_FIELDS,
+    FEATURE_COLUMN_NAMES,
     VALID_ROLES,
+    add_derived_features,
     get_nested,
+    season_from_patch,
 )
 from pipeline_io import iter_ndjson
+from playstyle_space import add_game_state_columns
 
 TIER_FROM_FILENAME = {
     "challenger": "CHALLENGER",
@@ -107,6 +111,7 @@ def build_tier_lookup(league_entries_glob: str) -> dict[str, dict[str, str]]:
 def extract_participant_row(
     match_id: str,
     queue_id: int,
+    match_context: dict,
     participant: dict,
     info_by_puuid: dict[str, dict[str, str]],
     min_game_length_seconds: int,
@@ -135,6 +140,7 @@ def extract_participant_row(
         "gameLength": game_length_seconds,
         "tier": puuid_info.get("tier", "UNKNOWN"),
         "region": puuid_info.get("region", "UNKNOWN"),
+        **match_context,
     }
 
     for field in ALL_FEATURE_FIELDS:
@@ -160,10 +166,18 @@ def build_feature_rows(
         info = match.get("info", {})
         queue_id = info.get("queueId")
         participants = info.get("participants", [])
+        # "16.17.712.3911" -> patch "16.17", season 16. Comparisons are season-matched
+        # downstream, since stat baselines shift a lot between seasons.
+        patch = ".".join(str(info.get("gameVersion", "")).split(".")[:2]) or None
+        match_context = {
+            "gameCreation": info.get("gameCreation"),
+            "patch": patch,
+            "season": season_from_patch(patch),
+        }
 
         for participant in participants:
             row = extract_participant_row(
-                match_id, queue_id, participant, info_by_puuid, min_game_length_seconds
+                match_id, queue_id, match_context, participant, info_by_puuid, min_game_length_seconds
             )
             if row is not None:
                 rows.append(row)
@@ -180,8 +194,10 @@ def print_sanity_report(df: pd.DataFrame) -> None:
     print(df["tier"].value_counts())
     print("\nRows by region:")
     print(df["region"].value_counts())
+    print("\nRows by season:")
+    print(df["season"].value_counts().sort_index())
 
-    feature_columns = [field.name for field in ALL_FEATURE_FIELDS]
+    feature_columns = FEATURE_COLUMN_NAMES
     nan_counts = df[feature_columns].isna().sum()
     nonzero_nan = nan_counts[nan_counts > 0]
     if len(nonzero_nan) > 0:
@@ -199,7 +215,9 @@ def run(args: argparse.Namespace) -> None:
     print(f"Loaded tier/region lookup for {len(info_by_puuid)} puuids.")
 
     rows = build_feature_rows(args.matches_path, info_by_puuid, args.min_game_length_seconds)
-    df = pd.DataFrame(rows)
+    # Team kill/gold differentials per minute -- used to outcome-adjust features before
+    # clustering (see playstyle_space.py).
+    df = add_game_state_columns(add_derived_features(pd.DataFrame(rows)))
 
     print_sanity_report(df)
 

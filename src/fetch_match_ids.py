@@ -29,6 +29,8 @@ DEFAULT_ALWAYS_INCLUDE_RIOT_IDS = [
     "river3#na1",
     "river#ell",
     "riverell#888",
+    "riverell#ttv",
+    "xlsteemo#na1",
 ]
 
 

@@ -16,6 +16,7 @@ Run from repo root:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 
 import requests
 
@@ -33,6 +34,8 @@ DEFAULT_RIOT_IDS = [
     "river3#na1",
     "river#ell",
     "riverell#888",
+    "riverell#ttv",
+    "xlsteemo#na1",
 ]
 
 
@@ -48,6 +51,12 @@ def parse_args() -> argparse.Namespace:
         help="Stop after this many match IDs per account. 0 (default) pulls all available history.",
     )
     parser.add_argument("--start", type=int, default=0, help="Riot match-history offset to start paginating from.")
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="Only fetch games on/after this date (YYYY-MM-DD), e.g. the current season's start. "
+        "Default: all available history.",
+    )
     parser.add_argument(
         "--riot-id",
         action="append",
@@ -68,6 +77,9 @@ def status_code_from_http_error(error: requests.HTTPError) -> int | None:
 def run(args: argparse.Namespace) -> None:
     riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
     client = RiotClient(platform=args.platform)
+    start_time = None
+    if args.since:
+        start_time = int(datetime.strptime(args.since, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
 
     seen_match_ids: set[str] = set()
     if ndjson_file_exists(args.match_ids_path):
@@ -104,7 +116,7 @@ def run(args: argparse.Namespace) -> None:
         start = args.start
         while True:
             batch = client.get_match_ids(
-                puuid=puuid, queue=args.queue, count=args.page_size, start=start
+                puuid=puuid, queue=args.queue, count=args.page_size, start=start, start_time=start_time
             )
             if not batch:
                 break

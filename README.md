@@ -69,7 +69,7 @@ Outputs:
 ### src/fetch_recent_self.py
 Pulls your own ranked match history directly (resolve Riot ID -> paginate match-v5 -> match details) without scanning the full league pool. By default it paginates until it runs out of history (100 IDs per call, the API max); pass `--max-games` to cap it. Appends into the same `match_ids.ndjson`/`matches.ndjson` files, so a normal `build_features.py` run picks the new games up. Safe to re-run -- already-fetched IDs/details are skipped.
 
-- Run: `python src/fetch_recent_self.py --riot-id "river3#na1"` (all history) or add `--max-games 50`
+- Run: `python src/fetch_recent_self.py --riot-id "river3#na1"` (all history), add `--max-games 50`, or `--since 2026-01-08` to only pull the current season (comparisons are season-matched anyway, so older games are never used).
 
 ### src/eda_overview.py
 Profiles the collected JSON/NDJSON files and writes a markdown schema and descriptive-statistics report.
@@ -90,13 +90,21 @@ Curated (hand-reviewed, not auto-parsed) list of participant fields used for clu
 Builds the per-participant feature table used for clustering.
 
 - Drops non-solo-role rows (keeps `TOP`/`JUNGLE`/`MIDDLE`/`BOTTOM`/`UTILITY` only) and remakes/early-surrenders shorter than `--min-game-length-seconds` (default 5 min).
-- Applies per-minute normalization from `feature_config.py`.
+- Applies per-minute normalization from `feature_config.py`, plus derived features (`cs_total_per_min` = lane minions + jungle camps, the "CS" number op.gg and the client show; `cs_per_min` alone is minions only).
+- Tags every row with `patch`, `season` (Riot's major version: 16 = 2026) and `gameCreation`.
 - Attaches source tier **and region** per puuid by matching against all `data/raw/league_entries*.json` pool files (`fetch_league_pool.py` tags every saved row with `platform`; files predating that default to NA1).
 - Output: `data/processed/participant_features.parquet`
 - Run: `python src/build_features.py`
 
+### src/playstyle_space.py
+Shared "playstyle space" transform used by clustering, `compare_self.py`, the dashboard export and the notebooks. Raw per-minute stats mostly track *how the game went* (a stomp inflates damage, gold, KDA and objective stats at once), so clustering them directly sorts games by outcome: the old clusters had win rates like 12% / 68% / 86%. To avoid that, each clustering feature is first regressed, per role, on game-context covariates (win flag, team kill differential/min, team gold differential/min, and a cubic spline of game length), and clustering runs on the residuals. That measures how a game's stats differ from a typical game with the same outcome and length. Game length has to be in there because champion level, killing sprees, turret plates and max lane leads are per-game totals or maxima that grow with game length, non-linearly in champion level's case (XP curve, cap at 18). Without it, the shortest games formed their own "low everything" cluster. Exact-duplicate features (e.g. Riot's `gold_per_minute` vs. our `gold_earned_per_min`) are excluded from clustering so they don't double-weight one dimension. The fitted regression lives in each role's model artifact.
+
+Clusters are named after their two most distinctive playstyle traits (e.g. "Vision Control · Frontline", "Enchanter · Skillshot Mage"). Traits are groups of standardized, outcome-adjusted features, filtered per role so names like "Jungle Farmer" only appear for junglers.
+
+Raw (unadjusted) feature values are still what the percentile comparisons use, since there being ahead is the point.
+
 ### src/build_clusters.py
-Fits a separate `StandardScaler` → `PCA` → `KMeans` pipeline per role (role is the dominant driver of raw stats, so clustering is done within-role rather than globally). Sweeps k and reports silhouette score to pick the cluster count per role (override with `--k-override ROLE=K`).
+Fits a separate outcome adjustment → `StandardScaler` → `PCA` → `KMeans` pipeline per role (role is the dominant driver of raw stats, so clustering is done within-role rather than globally). Sweeps k and reports silhouette score to pick the cluster count per role (override with `--k-override ROLE=K`). The centroid report lists each cluster's name, win rate (should stay near 50%; a large spread means outcome is leaking back in) and most common champions. Silhouette scores are modest (~0.12–0.15): playstyles form a continuum more than well-separated groups.
 
 - Models: `models/<role>_cluster.joblib`
 - Cluster assignments: `data/processed/participant_clusters.parquet`
@@ -142,7 +150,7 @@ Dashboard filters:
 
 Note: clustering (archetype cards, cluster-space scatter) is fit on the **combined** population across all regions for a role -- it isn't split by region. Only the percentile-comparison reference curves are region-specific.
 
-Each archetype card shows two comparisons against the population: your win rate within that cluster, and your *share* of games landing in it (over/under-represented vs. the population's own distribution across clusters).
+Each archetype card shows the cluster's dominant traits and most common champions, plus two comparisons against the population: your win rate within that cluster, and your *share* of games landing in it (over/under-represented vs. the population's own distribution across clusters).
 
 Champion icons are fetched from Data Dragon at export time, cached under `data/raw/champion_icon_cache/`, and embedded as base64 data URIs in the dashboard JSON -- a published Artifact's CSP blocks image requests to external hosts, so hotlinking the CDN directly wouldn't render.
 
@@ -153,6 +161,12 @@ A separate **"vs. Professional Play"** section compares you against LCK/LPL pro 
 Below that, **"Which pro do you play like?"** finds your nearest pro player match: each qualifying pro (5+ games in a role this season) gets a season-average stat profile, standardized against the pro population's own mean/std per feature; your current stat profile (respecting every active filter -- account, window, role, champion) is standardized the same way and compared by Euclidean distance to find the 3 closest pros in the selected league. This runs entirely client-side in the published dashboard -- no server-side matching step.
 
 - Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"` (repeatable; defaults to both configured accounts) then `python src/build_dashboard.py`
+
+## Comparison methodology
+
+- **Season-matched.** Stat baselines shift a lot between seasons (bot-lane median CS/min: ~7.4 in season 15, ~8.1 in season 16). `export_dashboard_data.py`, `compare_self.py` and `build_clusters.py` all restrict to the season most of the ranked pool was played in (`feature_config.current_season`), including your own games.
+- **Averages vs. averages.** Percentiles rank *your average* over the selected window against other players' *averages* (players with 10+ games in that role/tier; pros with 5+), not against individual games. Single games have far more spread than an average, so ranking an average against them understates how far from typical it is.
+- **Performance metrics are not outcome-adjusted.** The outcome/game-length adjustment in `playstyle_space.py` is only for clustering. Percentiles use raw values, since damage that helped win the game should count.
 
 ## Typical run order
 

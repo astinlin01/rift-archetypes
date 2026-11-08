@@ -24,6 +24,10 @@ CONTEXT_COLUMNS = (
     "queueId",
     "gameLength",
     "tier",
+    "region",
+    "gameCreation",
+    "patch",
+    "season",
 )
 
 
@@ -102,7 +106,43 @@ ALL_FEATURE_FIELDS: list[FeatureField] = (
     ALREADY_NORMALIZED_FIELDS + PER_MINUTE_FIELDS + RAW_COUNT_FIELDS
 )
 
-FEATURE_COLUMN_NAMES = [field.name for field in ALL_FEATURE_FIELDS]
+# Features computed from other features after extraction (build_features.add_derived_features).
+# cs_total_per_min is the "CS" number op.gg / the client show (lane minions + jungle
+# camps) -- cs_per_min alone is minions only and reads ~0.3/min low for an ADC.
+DERIVED_FEATURE_COLUMNS = ["cs_total_per_min"]
+
+FEATURE_COLUMN_NAMES = [field.name for field in ALL_FEATURE_FIELDS] + DERIVED_FEATURE_COLUMNS
+
+
+def add_derived_features(df):
+    """Compute DERIVED_FEATURE_COLUMNS in place-safe fashion (returns a new frame)."""
+    df = df.copy()
+    df["cs_total_per_min"] = df["cs_per_min"].fillna(0) + df["neutral_cs_per_min"].fillna(0)
+    return df
+
+
+def current_season(df) -> int | None:
+    """The season most of the tier-labeled (pool) population was played in.
+
+    Stat baselines move a lot between seasons (bot-lane median CS/min went from ~7.4 in
+    season 15 to ~8.1 in season 16), so every comparison is restricted to this season.
+    """
+    if "season" not in df.columns:
+        return None
+    pool = df[df["tier"] != "UNKNOWN"]["season"].dropna()
+    if pool.empty:
+        pool = df["season"].dropna()
+    return int(pool.mode().iloc[0]) if not pool.empty else None
+
+
+def season_from_patch(patch: str | None) -> int | None:
+    """'16.17' -> 16. Riot's major version number is the season (14 = 2024, 16 = 2026)."""
+    if not patch:
+        return None
+    try:
+        return int(str(patch).split(".")[0])
+    except ValueError:
+        return None
 
 
 def get_nested(participant: dict, dotted_path: str):

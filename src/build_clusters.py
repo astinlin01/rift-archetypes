@@ -1,6 +1,9 @@
 """
 Fit per-role KMeans playstyle clusters on the participant feature table.
 
+Features are outcome-adjusted first (see playstyle_space.py) so clusters capture
+playstyle rather than whether the game was won.
+
 Run from repo root:
     python src/build_clusters.py
 """
@@ -17,8 +20,16 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
+from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, current_season
+from playstyle_space import (
+    CLUSTER_FEATURE_COLUMNS,
+    add_game_state_columns,
+    apply_outcome_adjuster,
+    fit_outcome_adjuster,
+    name_clusters,
+)
 
+# Raw feature columns -- used for the human-readable centroid report.
 FEATURE_COLUMNS = [field.name for field in ALL_FEATURE_FIELDS]
 RANDOM_STATE = 42
 # silhouette_score is O(n^2) (full pairwise distances) -- exact is intractable once a
@@ -54,11 +65,6 @@ def parse_k_overrides(raw_overrides: list[str]) -> dict[str, int]:
     return overrides
 
 
-def prepare_role_matrix(role_df: pd.DataFrame) -> pd.DataFrame:
-    matrix = role_df[FEATURE_COLUMNS].copy()
-    return matrix.fillna(matrix.median(numeric_only=True))
-
-
 def pick_best_k(scaled_matrix, min_k: int, max_k: int) -> tuple[int, dict[int, float]]:
     scores: dict[int, float] = {}
     n_samples = scaled_matrix.shape[0]
@@ -86,7 +92,8 @@ def fit_role_cluster(
     pca_components: int,
     k_override: int | None,
 ) -> tuple[pd.DataFrame, dict]:
-    matrix = prepare_role_matrix(role_df)
+    outcome_adjuster = fit_outcome_adjuster(role_df)
+    matrix = apply_outcome_adjuster(role_df, outcome_adjuster)
 
     scaler = StandardScaler()
     scaled = scaler.fit_transform(matrix)
@@ -111,20 +118,27 @@ def fit_role_cluster(
         model = KMeans(n_clusters=best_k, random_state=RANDOM_STATE, n_init=10)
         labels = model.fit_predict(reduced)
 
+    cluster_names = name_clusters(scaled, labels, CLUSTER_FEATURE_COLUMNS, role)
+    win_rate_spread = pd.Series(role_df["win"].to_numpy()).groupby(labels).mean()
+
     print(
         f"[{role}] n={len(role_df)}, chosen k={best_k}, "
-        f"silhouette={scores[best_k]:.3f}, explained_var={pca.explained_variance_ratio_.sum():.3f}"
+        f"silhouette={scores[best_k]:.3f}, explained_var={pca.explained_variance_ratio_.sum():.3f}, "
+        f"cluster win rates={win_rate_spread.round(3).tolist()}"
     )
 
     result_df = role_df.copy()
     result_df["cluster"] = labels
+    result_df["cluster_name"] = [cluster_names[int(c)]["name"] for c in labels]
 
     artifact = {
         "role": role,
+        "outcome_adjuster": outcome_adjuster,
         "scaler": scaler,
         "pca": pca,
         "kmeans": model,
-        "feature_columns": FEATURE_COLUMNS,
+        "feature_columns": list(CLUSTER_FEATURE_COLUMNS),
+        "cluster_names": cluster_names,
         "silhouette_by_k": scores,
         "chosen_k": best_k,
     }
@@ -142,14 +156,27 @@ def render_centroid_report(role_results: dict[str, pd.DataFrame]) -> str:
         centroids = df.groupby("cluster")[FEATURE_COLUMNS].mean().round(2)
         cluster_sizes = df.groupby("cluster").size()
         win_rate = df.groupby("cluster")["win"].mean().round(3)
+        names = df.groupby("cluster")["cluster_name"].first()
+        top_champions = df.groupby("cluster")["championName"].agg(
+            lambda s: ", ".join(s.value_counts().index[:5])
+        )
 
-        lines.append("| cluster | n | win_rate | " + " | ".join(FEATURE_COLUMNS) + " |")
-        lines.append("|---|---:|---:|" + "---:|" * len(FEATURE_COLUMNS))
+        lines.append("| cluster | name | n | win_rate | top champions |")
+        lines.append("|---|---|---:|---:|---|")
+        for cluster_id in sorted(centroids.index):
+            lines.append(
+                f"| {cluster_id} | {names[cluster_id]} | {cluster_sizes[cluster_id]} | "
+                f"{win_rate[cluster_id]} | {top_champions[cluster_id]} |"
+            )
+        lines.append("")
+        lines.append("Raw (not outcome-adjusted) feature means per cluster:")
+        lines.append("")
+
+        lines.append("| cluster | " + " | ".join(FEATURE_COLUMNS) + " |")
+        lines.append("|---|" + "---:|" * len(FEATURE_COLUMNS))
         for cluster_id in sorted(centroids.index):
             row_values = " | ".join(str(v) for v in centroids.loc[cluster_id])
-            lines.append(
-                f"| {cluster_id} | {cluster_sizes[cluster_id]} | {win_rate[cluster_id]} | {row_values} |"
-            )
+            lines.append(f"| {cluster_id} | {row_values} |")
         lines.append("")
     return "\n".join(lines)
 
@@ -160,7 +187,11 @@ def run(args: argparse.Namespace) -> None:
             f"Feature table not found at {args.features_path}. Run build_features.py first."
         )
 
-    df = pd.read_parquet(args.features_path)
+    df = add_game_state_columns(pd.read_parquet(args.features_path))
+    season = current_season(df)
+    if season is not None:
+        df = df[df["season"] == season].reset_index(drop=True)
+        print(f"Fitting on season {season} games only ({len(df)} rows).")
     k_overrides = parse_k_overrides(args.k_override)
 
     os.makedirs(args.models_dir, exist_ok=True)

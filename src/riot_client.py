@@ -122,10 +122,14 @@ class RiotClient:
         url = f"https://{self.platform}.api.riotgames.com/lol/summoner/v4/summoners/{summoner_id}"
         return self._get(url)
 
-    def get_match_ids(self, puuid: str, queue: int = 420, count: int = 20, start: int = 0) -> list:
-        """Pull ranked match IDs for a player by puuid."""
+    def get_match_ids(
+        self, puuid: str, queue: int = 420, count: int = 20, start: int = 0, start_time: int | None = None
+    ) -> list:
+        """Pull ranked match IDs for a player by puuid. start_time: epoch seconds lower bound."""
         url = f"https://{self.region}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
         params = {"queue": queue, "count": count, "start": start}
+        if start_time is not None:
+            params["startTime"] = start_time
         return self._get(url, params=params)
 
     def get_match(self, match_id: str) -> dict:

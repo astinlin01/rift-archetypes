@@ -64,7 +64,8 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
             "gameLength": df["gamelength"],
             # Direct equivalents of our own HEADLINE_FEATURES:
             "damage_per_minute": df["dpm"],
-            "cs_per_min": df["cspm"],
+            # Oracle's Elixir cspm is total CS (minions + monsters), matching our cs_total_per_min.
+            "cs_total_per_min": df["cspm"],
             "vision_score_per_minute": df["vspm"],
             "team_damage_pct": df["damageshare"],
             "damage_taken_per_min": df["damagetakenperminute"],

@@ -16,10 +16,14 @@ import joblib
 import pandas as pd
 from scipy.stats import percentileofscore
 
-from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
+from feature_config import FEATURE_COLUMN_NAMES, VALID_ROLES, add_derived_features, current_season
+from playstyle_space import add_game_state_columns, to_playstyle_space
 from riot_client import RiotClient
 
-FEATURE_COLUMNS = [field.name for field in ALL_FEATURE_FIELDS]
+FEATURE_COLUMNS = FEATURE_COLUMN_NAMES
+# Percentiles rank your average against other players' averages (not single games,
+# whose much wider spread would understate how far from typical an average is).
+MIN_REFERENCE_PLAYER_GAMES = 10
 
 # Mirrors fetch_match_ids.py's always-include accounts.
 DEFAULT_RIOT_IDS = [
@@ -79,13 +83,11 @@ def load_role_artifact(models_dir: str, role: str) -> dict | None:
 
 
 def assign_clusters(rows: pd.DataFrame, artifact: dict) -> pd.DataFrame:
-    matrix = rows[FEATURE_COLUMNS].copy()
-    matrix = matrix.fillna(matrix.median(numeric_only=True))
-    scaled = artifact["scaler"].transform(matrix)
-    reduced = artifact["pca"].transform(scaled)
-    labels = artifact["kmeans"].predict(reduced)
+    labels = artifact["kmeans"].predict(to_playstyle_space(rows, artifact))
+    names = artifact.get("cluster_names", {})
     result = rows.copy()
     result["cluster"] = labels
+    result["cluster_name"] = [names.get(int(c), {}).get("name", str(c)) for c in labels]
     return result
 
 
@@ -96,11 +98,14 @@ def build_comparison_rows(
 ) -> list[dict]:
     rows: list[dict] = []
     my_means = my_role_df[FEATURE_COLUMNS].mean()
-    ref_means = reference_role_df[FEATURE_COLUMNS].mean()
+    counts = reference_role_df.groupby("puuid").size()
+    regulars = counts[counts >= MIN_REFERENCE_PLAYER_GAMES].index
+    ref_players = reference_role_df[reference_role_df["puuid"].isin(regulars)].groupby("puuid")[FEATURE_COLUMNS].mean()
+    ref_means = ref_players.mean()
 
     for column in FEATURE_COLUMNS:
         my_value = my_means[column]
-        ref_series = reference_role_df[column].dropna()
+        ref_series = ref_players[column].dropna()
         if ref_series.empty or pd.isna(my_value):
             percentile = None
         else:
@@ -129,7 +134,11 @@ def run(args: argparse.Namespace) -> None:
         raise RuntimeError("No puuids resolved. Pass --puuid or --riot-id.")
     print(f"Comparing {len(puuids)} account(s).")
 
-    df = pd.read_parquet(args.features_path)
+    df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
+    season = current_season(df)
+    if season is not None:
+        df = df[df["season"] == season].reset_index(drop=True)
+        print(f"Season-matched to season {season}.")
     my_df = df[df["puuid"].isin(puuids)]
     reference_df = df[df["tier"] == args.reference_tier.upper()]
 
@@ -153,7 +162,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"[{role}] No fitted cluster model found, skipping cluster assignment.")
         else:
             assigned = assign_clusters(my_role_df, artifact)
-            cluster_counts = assigned["cluster"].value_counts().to_dict()
+            cluster_counts = assigned["cluster_name"].value_counts().to_dict()
             print(f"[{role}] games={len(my_role_df)}, your cluster distribution: {cluster_counts}")
 
         comparison_rows = build_comparison_rows(my_role_df, reference_role_df, role)

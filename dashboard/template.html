@@ -376,7 +376,7 @@
     <select id="filter-window">
       <option value="20">Last 20 games</option>
       <option value="50">Last 50 games</option>
-      <option value="0" selected>All time</option>
+      <option value="0" selected>Whole season</option>
     </select>
   </div>
   <div class="filter-field">
@@ -440,7 +440,7 @@
     <div class="section-head">
       <div class="eyebrow">Playstyle clustering</div>
       <h2 id="archetypes-heading">Your archetypes</h2>
-      <p id="archetypes-sub">KMeans clusters fit on the full training population for this role. Each card shows the population win rate for that archetype, how much of your games land there vs. the population's own share (over/under-represented), and your win rate within it vs. the population's.</p>
+      <p id="archetypes-sub">KMeans clusters fit on the full training population for this role, on stats adjusted for game outcome (win/loss and team kill/gold lead) — so archetypes describe <em>how</em> games are played, not whether they were won. Each card shows the population win rate for that archetype, how much of your games land there vs. the population's own share (over/under-represented), and your win rate within it vs. the population's.</p>
     </div>
     <div class="card-grid" id="card-grid"></div>
   </section>
@@ -718,7 +718,7 @@
   function renderHeader(filters, windowGames, champGames) {
     document.getElementById('hdr-title').textContent = filters.account + ' — Scouting Report';
     document.getElementById('hdr-sub').textContent =
-      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games on record for ' + filters.account + '.';
+      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' season ' + DATA.season + ' ranked games on record for ' + filters.account + '.';
 
     var wins = windowGames.filter(function (g) { return g.win; }).length;
     var losses = windowGames.length - wins;
@@ -751,7 +751,7 @@
     });
 
     document.getElementById('games-heading').textContent =
-      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' ranked games';
+      (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' season ' + DATA.season + ' ranked games';
   }
 
   // ---------- Diverging bar chart ----------
@@ -818,8 +818,9 @@
     var tierLabel = titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region);
 
     document.getElementById('percentiles-sub').textContent =
-      'Your ' + scopeLabel + ' average in the current window against ' + tierLabel +
-      ' ' + roleLabel(filters.role) + ' players, by performance percentile.';
+      'Your ' + scopeLabel + ' average in the current window against the season ' + DATA.season + ' averages of ' +
+      (refForRoleTier ? Object.values(refForRoleTier)[0].n.toLocaleString() + ' ' : '') + tierLabel +
+      ' ' + roleLabel(filters.role) + ' players (10+ games each), by performance percentile.';
 
     if (!champGames.length) {
       container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
@@ -875,7 +876,7 @@
     var refForRoleLeague = DATA.pro_reference[filters.role] && DATA.pro_reference[filters.role][proLeague];
     var note = document.createElement('span');
     note.className = 'pro-sample-note';
-    note.textContent = refForRoleLeague ? 'n=' + Object.values(refForRoleLeague)[0].n + ' pro player-games' : '';
+    note.textContent = refForRoleLeague ? 'n=' + Object.values(refForRoleLeague)[0].n + ' pro players (5+ games each)' : '';
     toggle.innerHTML = '';
     toggle.appendChild(leagueButtons);
     toggle.appendChild(note);
@@ -966,14 +967,19 @@
   }
 
   // ---------- Archetype cards ----------
-  var descByRankName = {
-    'Passive & Behind': 'Lowest win rate of the group — games that fell behind early and stayed there.',
-    'Under Pressure': 'Below-average impact — struggling to convert lane state into game state.',
-    'Sustain Skirmisher': 'Middling win rate with a sustain/utility lean — trading rather than snowballing.',
-    'Balanced Contributor': 'Solid all-around win rate without one dominant statistical signature.',
-    'Snowballing Carry': 'High win rate driven by damage, gold, and objective participation.',
-    'Dominant Carry': 'Highest win rate of the group — the clearest "carried the game" profile.'
-  };
+  // Clusters are fit on outcome-adjusted stats, so win rate no longer orders them --
+  // order by population size (largest first) for stable colors across k.
+  function orderedClusters(summary) {
+    return summary.slice().sort(function (a, b) { return b.n - a.n || a.cluster - b.cluster; });
+  }
+
+  function describeCluster(c) {
+    var parts = [];
+    if (c.traits && c.traits.length) parts.push('Leans ' + c.traits.join(', ').toLowerCase() + '.');
+    if (c.low_traits && c.low_traits.length) parts.push('Less ' + c.low_traits.join(', ').toLowerCase() + '.');
+    if (c.top_champions && c.top_champions.length) parts.push('Common picks: ' + c.top_champions.join(', ') + '.');
+    return parts.join(' ');
+  }
 
   function renderArchetypes(filters, champGames) {
     var grid = document.getElementById('card-grid');
@@ -1001,8 +1007,7 @@
       yourGamesByCluster[c].push(g);
     });
 
-    var sorted = kData.summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
-    var maxWinRate = Math.max.apply(null, kData.summary.map(function (c) { return c.win_rate; }));
+    var sorted = orderedClusters(kData.summary);
     var totalPopGames = kData.summary.reduce(function (sum, c) { return sum + c.n; }, 0);
 
     sorted.forEach(function (c, rank) {
@@ -1039,9 +1044,9 @@
       card.className = 'panel arch-card';
       card.innerHTML =
         '<h3><span class="dot" style="background:' + color + '"></span>' + c.name + '</h3>' +
-        '<div class="desc" style="font-size:13px;color:var(--ink-2);margin-top:8px;">' + (descByRankName[c.name] || '') + '</div>' +
+        '<div class="desc" style="font-size:13px;color:var(--ink-2);margin-top:8px;">' + describeCluster(c) + '</div>' +
         '<div class="meter-label"><span>Population win rate</span><span class="mono tabular">' + pct(c.win_rate * 100) + '</span></div>' +
-        '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate / maxWinRate * 100) + ';background:' + color + '"></div></div>' +
+        '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate * 100) + ';background:' + color + '"></div></div>' +
         '<div class="arch-stat"><span class="n mono">' + yourCount + '</span><span class="of">of your ' + champGames.length + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>' +
         shareCompareHtml +
         winCompareHtml;
@@ -1055,7 +1060,7 @@
   var W = 760, H = 440, PAD = 24;
 
   function rankColorMap(summary) {
-    var sorted = summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
+    var sorted = orderedClusters(summary);
     var map = {};
     sorted.forEach(function (c, rank) { map[c.cluster] = { color: SLOTS[rank % SLOTS.length], name: c.name }; });
     return map;
@@ -1068,7 +1073,7 @@
 
     var legend = document.getElementById('scatter-legend');
     if (kData) {
-      var legendSorted = kData.summary.slice().sort(function (a, b) { return a.win_rate - b.win_rate; });
+      var legendSorted = orderedClusters(kData.summary);
       legend.innerHTML = legendSorted.map(function (c, rank) {
         return '<span class="legend-item"><span class="legend-swatch" style="background:' + SLOTS[rank % SLOTS.length] + '"></span>' + c.name + '</span>';
       }).join('');
@@ -1183,7 +1188,7 @@
       tdRole.textContent = roleLabel(g.role);
 
       var tdKda = document.createElement('td'); tdKda.className = 'num'; tdKda.textContent = fmt(g.features.kda, 2);
-      var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.features.cs_per_min, 1);
+      var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.features.cs_total_per_min, 1);
       var tdDmg = document.createElement('td'); tdDmg.className = 'num'; tdDmg.textContent = fmt(g.features.damage_per_minute, 0);
       var tdVis = document.createElement('td'); tdVis.className = 'num'; tdVis.textContent = fmt(g.features.vision_score_per_minute, 2);
 

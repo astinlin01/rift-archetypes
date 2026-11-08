@@ -31,15 +31,27 @@ import pandas as pd
 import requests
 from sklearn.cluster import KMeans
 
-from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES
+from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
 from pipeline_io import iter_ndjson
+from playstyle_space import (
+    add_game_state_columns,
+    apply_outcome_adjuster,
+    name_clusters,
+    to_playstyle_space,
+)
 
 FEATURE_COLUMNS = [f.name for f in ALL_FEATURE_FIELDS]
 RANDOM_STATE = 42
 K_OPTIONS = [3, 4, 5, 6]
-MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer rows than this
+MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer *players* than this
+# Reference curves are built from per-player averages, not individual games: the
+# dashboard compares *your average* over a window, and an average over many games has
+# far less spread than single games -- ranking it against single games would squash a
+# genuinely top-10% average down to ~70th percentile.
+MIN_PLAYER_GAMES_FOR_REFERENCE = 10
+MIN_PRO_GAMES_FOR_REFERENCE = 5
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
-DEFAULT_RIOT_IDS = ["river3#na1", "river#ell"]
+DEFAULT_RIOT_IDS = ["river3#na1", "river#ell", "riverell#888", "riverell#ttv", "xlsteemo#na1"]
 PCA_AXIS_TOP_N = 3
 ALL_ROLES_KEY = "ALL"
 
@@ -66,7 +78,7 @@ PRO_HEADLINE_FEATURES = [
     ("kda", "KDA", False),
     ("kill_participation", "Kill participation", False),
     ("team_damage_pct", "Team damage share", False),
-    ("cs_per_min", "CS / min", False),
+    ("cs_total_per_min", "CS / min", False),
     ("damage_taken_per_min", "Damage taken / min", True),
     ("control_wards_per_min", "Control wards / min", False),
     ("deaths_per_min", "Deaths / min", True),
@@ -81,7 +93,7 @@ HEADLINE_FEATURES = [
     ("kda", "KDA", False),
     ("kill_participation", "Kill participation", False),
     ("team_damage_pct", "Team damage share", False),
-    ("cs_per_min", "CS / min", False),
+    ("cs_total_per_min", "CS / min", False),
     ("cc_time_per_min", "CC time on enemies / min", False),
     ("damage_taken_per_min", "Damage taken / min", True),
     ("control_wards_per_min", "Control wards / min", False),
@@ -89,17 +101,9 @@ HEADLINE_FEATURES = [
     ("max_cs_advantage_lane_opp", "Max CS lead on opponent", False),
 ]
 
-# Ordered from "worst win rate" to "best win rate" archetype flavor. For a given k,
-# ranks are spread evenly across this spectrum so the two extremes always carry the
-# same name regardless of how many clusters are chosen.
-ARCHETYPE_NAME_SPECTRUM = [
-    "Passive & Behind",
-    "Under Pressure",
-    "Sustain Skirmisher",
-    "Balanced Contributor",
-    "Snowballing Carry",
-    "Dominant Carry",
-]
+# Archetype names come from playstyle_space.name_clusters (dominant playstyle traits),
+# not from win-rate rank -- clusters are fit on outcome-adjusted features.
+TOP_CHAMPIONS_PER_CLUSTER = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -121,8 +125,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_puuid_from_match_ids(match_ids_path: str, riot_id: str) -> str:
+    # Riot IDs are case-insensitive ("river3#NA1" and "river3#na1" are one account).
+    wanted = riot_id.strip().lower()
     for row in iter_ndjson(match_ids_path):
-        if row.get("source_riot_id") == riot_id:
+        if str(row.get("source_riot_id", "")).strip().lower() == wanted:
             return row["source_puuid"]
     raise RuntimeError(f"No match_ids.ndjson rows found for riot id {riot_id}")
 
@@ -134,17 +140,6 @@ def load_game_creation_by_match_id(matches_path: str, match_ids: set[str]) -> di
         if match_id in match_ids:
             creation_by_id[match_id] = match.get("info", {}).get("gameCreation")
     return creation_by_id
-
-
-def name_for_rank(rank: int, k: int) -> str:
-    if k <= 1:
-        return ARCHETYPE_NAME_SPECTRUM[len(ARCHETYPE_NAME_SPECTRUM) // 2]
-    idx = round(rank / (k - 1) * (len(ARCHETYPE_NAME_SPECTRUM) - 1))
-    return ARCHETYPE_NAME_SPECTRUM[idx]
-
-
-def fillna_with_median(matrix: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
-    return matrix.fillna(reference.median(numeric_only=True))
 
 
 HEADLINE_LABEL_BY_FEATURE = {column: label for column, label, _ in HEADLINE_FEATURES}
@@ -162,7 +157,7 @@ def prettify_feature_name(name: str) -> str:
     return label[:1].upper() + label[1:]
 
 
-def describe_pca_axis(component: np.ndarray) -> str:
+def describe_pca_axis(component: np.ndarray, feature_columns: list[str]) -> str:
     # Walk loadings in descending magnitude order, but skip a feature whose label
     # we've already used -- a few feature pairs (e.g. our own gold_earned_per_min vs.
     # Riot's already-normalized gold_per_minute) are highly correlated and would
@@ -171,7 +166,7 @@ def describe_pca_axis(component: np.ndarray) -> str:
     seen_labels: set[str] = set()
     parts = []
     for idx in order:
-        label = prettify_feature_name(FEATURE_COLUMNS[idx])
+        label = prettify_feature_name(feature_columns[idx])
         normalized = re.sub(r"[^a-z0-9]", "", label.lower())
         if normalized in seen_labels:
             continue
@@ -193,9 +188,9 @@ def build_role_payload(
     role_df = df[df["teamPosition"] == role].reset_index(drop=True)
     artifact = joblib.load(os.path.join(models_dir, f"{role.lower()}_cluster.joblib"))
 
-    matrix = fillna_with_median(role_df[FEATURE_COLUMNS], role_df[FEATURE_COLUMNS])
-    scaled = artifact["scaler"].transform(matrix)
-    reduced_full = artifact["pca"].transform(scaled)  # (n, pca_components)
+    # Outcome-adjusted + standardized features (for naming) and their PCA projection.
+    adjusted_scaled = artifact["scaler"].transform(apply_outcome_adjuster(role_df, artifact["outcome_adjuster"]))
+    reduced_full = artifact["pca"].transform(adjusted_scaled)  # (n, pca_components)
 
     rng = random.Random(RANDOM_STATE)
     sample_idx = list(range(len(role_df)))
@@ -207,9 +202,9 @@ def build_role_payload(
         "y": [round(float(v), 4) for v in reduced_full[sample_idx, 1]],
     }
 
-    my_matrix = fillna_with_median(my_role_df[FEATURE_COLUMNS], role_df[FEATURE_COLUMNS])
-    my_scaled = artifact["scaler"].transform(my_matrix)
-    my_reduced_full = artifact["pca"].transform(my_scaled) if len(my_role_df) else np.empty((0, reduced_full.shape[1]))
+    my_reduced_full = (
+        to_playstyle_space(my_role_df, artifact) if len(my_role_df) else np.empty((0, reduced_full.shape[1]))
+    )
 
     clusters_by_k: dict[str, dict] = {}
     my_cluster_by_k: dict[str, list[int]] = {}
@@ -221,8 +216,12 @@ def build_role_payload(
 
         win_by_cluster = pd.Series(role_df["win"].to_numpy()).groupby(labels_full).mean()
         size_by_cluster = pd.Series(labels_full).value_counts()
-        ranked = win_by_cluster.sort_values().index.tolist()
-        name_by_cluster = {cluster_id: name_for_rank(rank, k) for rank, cluster_id in enumerate(ranked)}
+        naming = name_clusters(adjusted_scaled, labels_full, artifact["feature_columns"], role)
+        top_champions = (
+            pd.Series(role_df["championName"].to_numpy())
+            .groupby(labels_full)
+            .agg(lambda s: s.value_counts().index[:TOP_CHAMPIONS_PER_CLUSTER].tolist())
+        )
 
         clusters_by_k[str(k)] = {
             "sample_labels": [int(labels_full[i]) for i in sample_idx],
@@ -231,7 +230,10 @@ def build_role_payload(
                     "cluster": int(cluster_id),
                     "n": int(size_by_cluster[cluster_id]),
                     "win_rate": round(float(win_by_cluster[cluster_id]), 3),
-                    "name": name_by_cluster[cluster_id],
+                    "name": naming[int(cluster_id)]["name"],
+                    "traits": naming[int(cluster_id)]["traits"],
+                    "low_traits": naming[int(cluster_id)]["low_traits"],
+                    "top_champions": top_champions[cluster_id],
                 }
                 for cluster_id in sorted(win_by_cluster.index)
             ],
@@ -249,8 +251,8 @@ def build_role_payload(
     # loading of each standardized feature onto axis i, so the top absolute loadings
     # tell us what that axis mostly separates on.
     pca_axis_labels = {
-        "x": describe_pca_axis(artifact["pca"].components_[0]),
-        "y": describe_pca_axis(artifact["pca"].components_[1]),
+        "x": describe_pca_axis(artifact["pca"].components_[0], artifact["feature_columns"]),
+        "y": describe_pca_axis(artifact["pca"].components_[1], artifact["feature_columns"]),
     }
 
     return {
@@ -262,16 +264,31 @@ def build_role_payload(
     }
 
 
-def build_curves_for_role_df(role_df: pd.DataFrame, headline_features=HEADLINE_FEATURES) -> dict:
+def player_averages(rows: pd.DataFrame, player_column: str, min_games: int, feature_columns: list[str]) -> pd.DataFrame:
+    counts = rows.groupby(player_column).size()
+    regulars = counts[counts >= min_games].index
+    return rows[rows[player_column].isin(regulars)].groupby(player_column)[feature_columns].mean()
+
+
+def build_curves_for_role_df(
+    role_df: pd.DataFrame,
+    headline_features=HEADLINE_FEATURES,
+    player_column: str = "puuid",
+    min_games: int = MIN_PLAYER_GAMES_FOR_REFERENCE,
+) -> dict:
+    feature_columns = [c for c, _, _ in headline_features]
+    averages = player_averages(role_df, player_column, min_games, feature_columns)
+    if len(averages) < MIN_REFERENCE_SAMPLE:
+        return {}
     feature_curves = {}
     quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
-    for column, _, _ in headline_features:
-        series = role_df[column].dropna()
+    for column in feature_columns:
+        series = averages[column].dropna()
         if series.empty:
             continue
         feature_curves[column] = {
             "ref_avg": round(float(series.mean()), 3),
-            "n": int(len(series)),
+            "n": int(len(series)),  # number of players, not games
             "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
         }
     return feature_curves
@@ -299,9 +316,9 @@ def build_pro_reference(pro_df: pd.DataFrame) -> tuple[dict, list[str]]:
         role_df = pro_df[pro_df["role"] == role]
         for league in leagues:
             league_role_df = role_df[role_df["league"] == league]
-            if len(league_role_df) < MIN_REFERENCE_SAMPLE:
-                continue
-            feature_curves = build_curves_for_role_df(league_role_df, PRO_HEADLINE_FEATURES)
+            feature_curves = build_curves_for_role_df(
+                league_role_df, PRO_HEADLINE_FEATURES, player_column="playername", min_games=MIN_PRO_GAMES_FOR_REFERENCE
+            )
             if feature_curves:
                 reference[role][league] = feature_curves
     return reference, leagues
@@ -367,8 +384,6 @@ def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str
             region_curves = {}
             for tier in tiers:
                 tier_role_df = region_role_df[region_role_df["tier"] == tier]
-                if len(tier_role_df) < MIN_REFERENCE_SAMPLE:
-                    continue
                 feature_curves = build_curves_for_role_df(tier_role_df)
                 if feature_curves:
                     region_curves[tier] = feature_curves
@@ -420,12 +435,26 @@ def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
 
 
 def run(args: argparse.Namespace) -> None:
-    df = pd.read_parquet(args.features_path)
+    df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
     riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
+
+    # Everything -- reference curves, clustering population, and your own games -- is
+    # restricted to one season so you're never compared across a stat-baseline shift.
+    season = current_season(df)
+    if season is not None:
+        before = len(df)
+        df = df[df["season"] == season].reset_index(drop=True)
+        print(f"Season-matching to season {season}: kept {len(df)} of {before} rows.")
+    else:
+        print("Warning: feature table has no season column -- rebuild with build_features.py to season-match.")
 
     account_frames = []
     for riot_id in riot_ids:
-        puuid = resolve_puuid_from_match_ids(args.match_ids_path, riot_id)
+        try:
+            puuid = resolve_puuid_from_match_ids(args.match_ids_path, riot_id)
+        except RuntimeError as error:
+            print(f"Warning: {error}. Skipping (run fetch_recent_self.py for this account first).")
+            continue
         account_df = df[df["puuid"] == puuid].copy()
         if account_df.empty:
             print(f"Warning: no feature rows found for {riot_id} (puuid {puuid}). Skipping.")
@@ -438,8 +467,9 @@ def run(args: argparse.Namespace) -> None:
 
     my_df = pd.concat(account_frames, ignore_index=True)
 
-    creation_by_id = load_game_creation_by_match_id(args.matches_path, set(my_df["matchId"]))
-    my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
+    if "gameCreation" not in my_df.columns:
+        creation_by_id = load_game_creation_by_match_id(args.matches_path, set(my_df["matchId"]))
+        my_df["gameCreation"] = my_df["matchId"].map(creation_by_id)
     my_df = my_df.sort_values("gameCreation", ascending=False).reset_index(drop=True)
 
     tiers = sorted(
@@ -528,6 +558,7 @@ def run(args: argparse.Namespace) -> None:
         }
 
     payload = {
+        "season": season,
         "accounts": list(accounts_summary.keys()),
         "accounts_summary": accounts_summary,
         "k_options": K_OPTIONS,
