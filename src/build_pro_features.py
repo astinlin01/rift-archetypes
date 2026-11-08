@@ -73,8 +73,9 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
             "kda": (df["kills"] + df["assists"]) / df["deaths"].clip(lower=1),
             "kill_participation": (df["kills"] + df["assists"]) / df["teamkills"].clip(lower=1),
             "control_wards_per_min": df["controlwardsbought"] / minutes,
-            # gold_earned_per_min is in HEADLINE_FEATURES but has a clean OE equivalent too:
-            "gold_earned_per_min": df["earned gpm"],
+            # Riot's goldEarned includes starting gold and passive income; OE's "earned gpm"
+            # excludes both (reads ~100+ gold/min low), so use totalgold instead.
+            "gold_earned_per_min": df["totalgold"] / minutes,
         }
     )
     return features

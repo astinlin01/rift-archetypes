@@ -214,6 +214,99 @@ def trait_scores(centroid_z: pd.Series, role: str | None = None) -> pd.Series:
     return pd.Series(scores).sort_values(ascending=False)
 
 
+# Plain-language phrasing of each trait for card descriptions ("More X; less Y").
+TRAIT_PHRASES: dict[str, str] = {
+    "Frontline": "damage absorbed",
+    "Crowd Control": "crowd control",
+    "Damage Carry": "damage output",
+    "Enchanter": "heals & shields",
+    "Vision Control": "vision",
+    "Farm-Focused": "farming",
+    "Lane Bully": "lane leads",
+    "Duelist": "kills & solo kills",
+    "Teamfighter": "kill participation",
+    "Split-Pusher": "tower damage",
+    "Objective Control": "objective damage",
+    "Jungle Farmer": "jungle camps",
+    "Skillshot Mage": "ability usage",
+    "High-Risk": "deaths",
+}
+
+# Role-specific named archetypes, each defined by a trait signature (+ = more of the
+# trait, - = less). A cluster takes the archetype whose signature best matches its trait
+# profile; generic trait-pair names are only a fallback. This keeps names meaningful
+# for the role (an ADC who absorbs damage and dies more is a "skirmisher", not a
+# "frontline") and stable across the dashboard's k = 3-6 refits.
+ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
+    "BOTTOM": {
+        "Hyper-Carry": {"Damage Carry": 1, "Duelist": 1, "Split-Pusher": 0.5},
+        "Safe Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "High-Risk": -1, "Frontline": -0.7},
+        "Aggressive Skirmisher": {"High-Risk": 1, "Frontline": 1, "Duelist": 0.4, "Farm-Focused": -0.5},
+        "Vision-Focused Carry": {"Vision Control": 1, "Farm-Focused": 0.4},
+        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1, "Duelist": -0.5},
+        "Utility Mage": {"Enchanter": 1, "Crowd Control": 1, "Teamfighter": 0.5},
+        "Ability-Heavy Carry": {"Skillshot Mage": 1.5},
+    },
+    "TOP": {
+        "Carry Duelist": {"Duelist": 1, "Damage Carry": 1, "Lane Bully": 0.5},
+        "Tank / Frontline": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.5, "Damage Carry": -0.5},
+        "Lane Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "High-Risk": -0.7},
+        "Split-Pusher": {"Split-Pusher": 1, "Objective Control": 0.5, "Teamfighter": -0.7},
+        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
+        "Vision-Focused": {"Vision Control": 1},
+    },
+    "JUNGLE": {
+        "Carry Jungler": {"Damage Carry": 1, "Duelist": 1},
+        "Tank / Engage": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.6},
+        "Farming Jungler": {"Jungle Farmer": 1, "High-Risk": -0.6, "Frontline": -0.4},
+        "Vision / Enabler": {"Vision Control": 1, "Teamfighter": 0.6},
+        "Objective-Focused": {"Objective Control": 1},
+        "Ranged / Poke Jungler": {"Skillshot Mage": 1, "Vision Control": 0.6},
+        "Low-Resource": {"Damage Carry": -1, "Jungle Farmer": -1},
+    },
+    "MIDDLE": {
+        "Assassin / Carry": {"Duelist": 1, "Damage Carry": 1},
+        "Control Mage": {"Vision Control": 0.8, "Crowd Control": 0.8, "Farm-Focused": 0.6, "High-Risk": -0.7},
+        "Lane-Dominant Carry": {"Lane Bully": 1, "Farm-Focused": 0.7, "Split-Pusher": 0.5},
+        "Frontline Skirmisher": {"Frontline": 1, "High-Risk": 0.7},
+        "Roaming Playmaker": {"Teamfighter": 1, "Crowd Control": 0.5, "Farm-Focused": -0.5},
+        "Scaling Farmer": {"Farm-Focused": 1, "Lane Bully": 0.5, "Teamfighter": -0.5},
+        "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
+    },
+    "UTILITY": {
+        "Damage Support": {"Damage Carry": 1, "Duelist": 0.8},
+        "Enchanter": {"Enchanter": 1, "Frontline": -0.6},
+        "Engage Tank": {"Frontline": 1, "Crowd Control": 0.8, "Vision Control": 0.4},
+        "Vision Support": {"Vision Control": 1},
+        "Mage / Poke Support": {"Damage Carry": 0.8, "Split-Pusher": 0.6, "Skillshot Mage": 0.6, "Duelist": -0.3},
+        "Low-Resource": {"Vision Control": -1, "Damage Carry": -0.5, "Enchanter": -0.5},
+    },
+}
+# Minimum signature match (cosine similarity) for an archetype name to apply.
+MIN_ARCHETYPE_MATCH = 0.45
+
+
+def _signature_match(scores: pd.Series, signature: dict[str, float]) -> float:
+    traits = [t for t in signature if t in scores.index]
+    if not traits:
+        return -1.0
+    sig = np.array([signature[t] for t in traits])
+    vec = scores.reindex(traits).to_numpy()
+    # Cosine against the full trait vector, so a cluster that's extreme on traits the
+    # signature doesn't mention matches less well.
+    full_norm = np.linalg.norm(scores.to_numpy())
+    if full_norm == 0:
+        return -1.0
+    return float(sig @ vec / (np.linalg.norm(sig) * full_norm))
+
+
+def _fallback_name(scores: pd.Series) -> str:
+    positive = [t for t, s in scores.items() if s >= MIN_TRAIT_SCORE]
+    if not positive:
+        return LOW_PROFILE_NAME
+    return " · ".join(positive[:2])
+
+
 def name_clusters(
     adjusted_scaled: np.ndarray,
     labels: np.ndarray,
@@ -222,37 +315,43 @@ def name_clusters(
 ) -> dict[int, dict]:
     """Return {cluster_id: {"name", "traits", "low_traits"}} from standardized adjusted features.
 
-    Names are made unique within a role: if two clusters' top-two traits collide, the
-    later one swaps in its next-best trait.
+    Clusters are matched to the role's named archetypes greedily, best (cluster,
+    archetype) match first, each archetype used at most once; clusters left without a
+    good match fall back to their top-two trait names. "traits"/"low_traits" are plain
+    phrases (TRAIT_PHRASES) for the card description.
     """
     frame = pd.DataFrame(adjusted_scaled, columns=feature_columns)
     centroids = frame.groupby(labels).mean()
+    scores_by_cluster = {int(c): trait_scores(centroids.loc[c], role) for c in centroids.index}
+
+    archetypes = ROLE_ARCHETYPES.get(role, {}) if role else {}
+    candidates = sorted(
+        (
+            (_signature_match(scores, signature), cluster_id, name)
+            for cluster_id, scores in scores_by_cluster.items()
+            for name, signature in archetypes.items()
+        ),
+        reverse=True,
+    )
+    names: dict[int, str] = {}
+    used: set[str] = set()
+    for match, cluster_id, name in candidates:
+        if match < MIN_ARCHETYPE_MATCH:
+            break
+        if cluster_id in names or name in used:
+            continue
+        names[cluster_id] = name
+        used.add(name)
 
     result: dict[int, dict] = {}
-    used_names: set[str] = set()
-    # Name the most distinctive clusters first so they get first pick of trait pairs.
-    order = sorted(centroids.index, key=lambda c: -trait_scores(centroids.loc[c], role).iloc[0])
-    for cluster_id in order:
-        scores = trait_scores(centroids.loc[cluster_id], role)
-        positive = [t for t, s in scores.items() if s >= MIN_TRAIT_SCORE]
-        low = [t for t, s in scores.sort_values().items() if s <= -MIN_TRAIT_SCORE][:2]
-
-        name = None
-        if not positive:
-            name = LOW_PROFILE_NAME
-        elif len(positive) == 1:
-            name = positive[0]
-        else:
-            for i in range(1, len(positive)):
-                candidate = f"{positive[0]} · {positive[i]}"
-                if candidate not in used_names:
-                    name = candidate
-                    break
-            name = name or positive[0]
+    for cluster_id, scores in scores_by_cluster.items():
+        name = names.get(cluster_id) or _fallback_name(scores)
         base, suffix = name, 2
-        while name in used_names:
+        while name in used and names.get(cluster_id) != name:
             name = f"{base} ({suffix})"
             suffix += 1
-        used_names.add(name)
-        result[int(cluster_id)] = {"name": name, "traits": positive[:3], "low_traits": low}
+        used.add(name)
+        positive = [TRAIT_PHRASES[t] for t, s in scores.items() if s >= MIN_TRAIT_SCORE][:3]
+        low = [TRAIT_PHRASES[t] for t, s in scores.sort_values().items() if s <= -MIN_TRAIT_SCORE][:2]
+        result[cluster_id] = {"name": name, "traits": positive, "low_traits": low}
     return result

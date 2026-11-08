@@ -50,6 +50,9 @@ MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer *players* th
 # genuinely top-10% average down to ~70th percentile.
 MIN_PLAYER_GAMES_FOR_REFERENCE = 10
 MIN_PRO_GAMES_FOR_REFERENCE = 5
+# A pro league only has ~10-16 players per role, so the solo-queue player minimum
+# (MIN_REFERENCE_SAMPLE) would rule every league out.
+MIN_PRO_REFERENCE_SAMPLE = 8
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
 DEFAULT_RIOT_IDS = ["river3#na1", "river#ell", "riverell#888", "riverell#ttv", "xlsteemo#na1"]
 PCA_AXIS_TOP_N = 3
@@ -275,10 +278,11 @@ def build_curves_for_role_df(
     headline_features=HEADLINE_FEATURES,
     player_column: str = "puuid",
     min_games: int = MIN_PLAYER_GAMES_FOR_REFERENCE,
+    min_players: int = MIN_REFERENCE_SAMPLE,
 ) -> dict:
     feature_columns = [c for c, _, _ in headline_features]
     averages = player_averages(role_df, player_column, min_games, feature_columns)
-    if len(averages) < MIN_REFERENCE_SAMPLE:
+    if len(averages) < min_players:
         return {}
     feature_curves = {}
     quantiles = np.linspace(0, 100, BREAKPOINT_COUNT)
@@ -288,6 +292,9 @@ def build_curves_for_role_df(
             continue
         feature_curves[column] = {
             "ref_avg": round(float(series.mean()), 3),
+            # Spread of player averages -- the dashboard uses it to place you relative to
+            # your solo-queue peers when matching against pros (see renderProMatches).
+            "std": round(float(series.std(ddof=0)) or 1.0, 4),
             "n": int(len(series)),  # number of players, not games
             "breakpoints": [round(float(v), 4) for v in np.percentile(series, quantiles)],
         }
@@ -317,7 +324,11 @@ def build_pro_reference(pro_df: pd.DataFrame) -> tuple[dict, list[str]]:
         for league in leagues:
             league_role_df = role_df[role_df["league"] == league]
             feature_curves = build_curves_for_role_df(
-                league_role_df, PRO_HEADLINE_FEATURES, player_column="playername", min_games=MIN_PRO_GAMES_FOR_REFERENCE
+                league_role_df,
+                PRO_HEADLINE_FEATURES,
+                player_column="playername",
+                min_games=MIN_PRO_GAMES_FOR_REFERENCE,
+                min_players=MIN_PRO_REFERENCE_SAMPLE,
             )
             if feature_curves:
                 reference[role][league] = feature_curves
@@ -339,8 +350,14 @@ def build_pro_player_profiles(pro_df: pd.DataFrame) -> dict:
         if role_df.empty:
             continue
 
-        mean = role_df[feature_cols].mean()
-        std = role_df[feature_cols].std(ddof=0).replace(0, 1.0)
+        # Standardize against the spread of *player averages* (not single pro games),
+        # matching how the dashboard standardizes you against your solo-queue peers'
+        # averages -- so both z-scores mean "how far from typical for your population".
+        qualifying = player_averages(role_df, "playername", MIN_PRO_PLAYER_GAMES, feature_cols)
+        if qualifying.empty:
+            continue
+        mean = qualifying.mean()
+        std = qualifying.std(ddof=0).replace(0, 1.0)
 
         players = []
         for player_name, player_df in role_df.groupby("playername"):

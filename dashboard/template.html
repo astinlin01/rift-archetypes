@@ -252,6 +252,12 @@
   .divbar-fill.pos { background: var(--div-pos); left: 50%; }
   .divbar-fill.neg { background: var(--div-neg); right: 50%; }
   .divbar-value { font-size: 13px; text-align: right; color: var(--ink); }
+  .pctbar-track { position: relative; height: 16px; border-radius: 4px; background: var(--surface-2); }
+  .pctbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; cursor: pointer; transition: filter 0.12s ease; }
+  .pctbar-fill:hover, .pctbar-fill:focus-visible { filter: brightness(1.12); outline: none; }
+  .pctbar-fill.pos { background: var(--div-pos); }
+  .pctbar-fill.neg { background: var(--div-neg); }
+  .pctbar-median { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 2px; background: var(--ink-muted); opacity: 0.7; pointer-events: none; }
   .divbar-value .sign { color: var(--ink-muted); font-size: 11px; }
 
   .legend-row { display: flex; gap: 18px; align-items: center; padding: 14px 22px; flex-wrap: wrap; border-bottom: 1px solid var(--gridline); }
@@ -407,12 +413,14 @@
     <div class="section-head">
       <div class="eyebrow">vs. reference tier</div>
       <h2>How you compare</h2>
-      <p id="percentiles-sub">Your average against the reference tier, by performance percentile. Right = outperforming; left = underperforming. For stats where a lower raw value is better (deaths, damage taken), the percentile is flipped so direction always means the same thing.</p>
+      <p id="percentiles-sub">Your average against the reference tier, as a performance percentile.</p>
     </div>
     <div class="panel">
       <div class="legend-row">
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Outperforming</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Underperforming</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Above median</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Below median</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--ink-muted);width:2px;height:12px;border-radius:0"></span>Median (50th)</span>
+        <span class="legend-item">Percentile = share of players you outperform; flipped for lower-is-better stats so a longer bar is always better.</span>
       </div>
       <div class="divbars" id="divbars"></div>
     </div>
@@ -422,7 +430,7 @@
     <div class="section-head">
       <div class="eyebrow">vs. Professional Play</div>
       <h2 id="pro-heading">How you compare to the pros</h2>
-      <p id="pro-sub">Your average against pro players in the same role, from Oracle's Elixir match data. Fewer stats are available here than the solo-queue comparison above (no CC time or lane-opponent data in pro match records).</p>
+      <p id="pro-sub">Your average against LCK/LPL pros' season averages in the same role (Oracle's Elixir match data). Pro games play differently from solo queue &mdash; far more vision and control wards, slower and more coordinated &mdash; so read stats like vision as an environment gap more than a skill gap.</p>
     </div>
     <div class="panel" id="pro-panel">
       <div class="legend-row" id="pro-league-toggle" style="justify-content:space-between;"></div>
@@ -431,7 +439,7 @@
 
     <div class="section-head" style="margin-top:36px;">
       <h3 id="pro-match-heading" style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:19px;">Which pro do you play like?</h3>
-      <p id="pro-match-sub" style="color:var(--ink-2);margin-top:6px;font-size:13.5px;">Nearest pro players by season-average stat profile (standardized against the pro population, Euclidean distance across the same stats as the chart above).</p>
+      <p id="pro-match-sub" style="color:var(--ink-2);margin-top:6px;font-size:13.5px;">Matches on <em>relative</em> style: your stats are measured against your solo-queue peers (the region/tier selected above) and each pro's against other pros, then compared. So a pro who out-damages other pros by as much as you out-damage your peers is a close match &mdash; regardless of how differently pro games play.</p>
     </div>
     <div class="card-grid" id="pro-match-grid"></div>
   </section>
@@ -754,7 +762,17 @@
       (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' season ' + DATA.season + ' ranked games';
   }
 
-  // ---------- Diverging bar chart ----------
+  // ---------- Percentile bar chart ----------
+  function ordinal(n) {
+    var r = Math.round(n);
+    var mod100 = r % 100, mod10 = r % 10;
+    var suffix = (mod100 >= 11 && mod100 <= 13) ? 'th' : (mod10 === 1 ? 'st' : mod10 === 2 ? 'nd' : mod10 === 3 ? 'rd' : 'th');
+    return r + suffix;
+  }
+
+  // Each row: a 0-100 track, filled to your percentile, with a tick at the median.
+  // For lower-is-better stats (deaths, damage taken) the percentile is flipped, so a
+  // longer bar always means better.
   function renderDivBars(container, headlineFeatures, refCurves, champGames, refLabel) {
     container.innerHTML = '';
     headlineFeatures.forEach(function (f) {
@@ -764,31 +782,30 @@
       if (yourAvg === null) return;
 
       var rawPercentile = percentileFromBreakpoints(yourAvg, curve.breakpoints);
-      var displayPercentile = f.invert ? 100 - rawPercentile : rawPercentile;
-      var delta = displayPercentile - 50;
-      var widthPct = (Math.abs(delta) / 50) * 100;
+      var displayPercentile = Math.max(0, Math.min(100, f.invert ? 100 - rawPercentile : rawPercentile));
+      var above = displayPercentile >= 50;
 
       var row = document.createElement('div');
       row.className = 'divbar-row';
 
       var label = document.createElement('div');
       label.className = 'divbar-label';
-      label.textContent = f.label;
+      label.textContent = f.label + (f.invert ? ' (lower = better)' : '');
 
       var track = document.createElement('div');
-      track.className = 'divbar-track';
-      var axis = document.createElement('div');
-      axis.className = 'divbar-axis';
+      track.className = 'pctbar-track';
+      var median = document.createElement('div');
+      median.className = 'pctbar-median';
       var fillBar = document.createElement('div');
-      fillBar.className = 'divbar-fill ' + (delta >= 0 ? 'pos' : 'neg');
-      fillBar.style.width = 'calc(' + widthPct + '% * 0.5)';
+      fillBar.className = 'pctbar-fill ' + (above ? 'pos' : 'neg');
+      fillBar.style.width = Math.max(displayPercentile, 1.5) + '%';
       fillBar.tabIndex = 0;
 
       var tooltipHtml =
         '<div class="tt-title">' + f.label + '</div>' +
         '<div class="tt-row"><span>You</span><strong>' + fmt(yourAvg, 2) + '</strong></div>' +
         '<div class="tt-row"><span>' + refLabel + ' avg</span><strong>' + fmt(curve.ref_avg, 2) + '</strong></div>' +
-        '<div class="tt-row"><span>Performance percentile</span><strong>' + fmt(displayPercentile, 0) + '</strong></div>';
+        '<div class="tt-row"><span>Better than</span><strong>' + Math.round(displayPercentile) + '% of players</strong></div>';
 
       fillBar.addEventListener('pointerenter', function (e) { showTooltip(e, tooltipHtml); });
       fillBar.addEventListener('pointermove', moveTooltip);
@@ -796,12 +813,12 @@
       fillBar.addEventListener('focus', function (e) { showTooltip(e, tooltipHtml); });
       fillBar.addEventListener('blur', hideTooltip);
 
-      track.appendChild(axis);
       track.appendChild(fillBar);
+      track.appendChild(median);
 
       var value = document.createElement('div');
       value.className = 'divbar-value mono tabular';
-      value.innerHTML = (delta >= 0 ? '<span class="sign">+</span>' : '<span class="sign">−</span>') + Math.round(Math.abs(delta));
+      value.textContent = ordinal(displayPercentile);
 
       row.appendChild(label);
       row.appendChild(track);
@@ -820,7 +837,7 @@
     document.getElementById('percentiles-sub').textContent =
       'Your ' + scopeLabel + ' average in the current window against the season ' + DATA.season + ' averages of ' +
       (refForRoleTier ? Object.values(refForRoleTier)[0].n.toLocaleString() + ' ' : '') + tierLabel +
-      ' ' + roleLabel(filters.role) + ' players (10+ games each), by performance percentile.';
+      ' ' + roleLabel(filters.role) + ' players (10+ games each).';
 
     if (!champGames.length) {
       container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
@@ -919,13 +936,20 @@
     }
 
     var featureCols = Object.keys(profile.mean);
+    var soloRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region] &&
+      DATA.reference[filters.role][filters.region][filters.tier];
     var yourZ = {};
     var missingFeature = false;
     featureCols.forEach(function (col) {
       var avg = mean(champGames.map(function (g) { return g.features[col]; }));
       if (avg === null) { missingFeature = true; return; }
-      var std = profile.std[col] || 1;
-      yourZ[col] = (avg - profile.mean[col]) / std;
+      var peer = soloRef && soloRef[col];
+      if (peer && peer.std) {
+        // Relative to your solo-queue peers, mirroring each pro's z vs other pros.
+        yourZ[col] = (avg - peer.ref_avg) / peer.std;
+      } else {
+        yourZ[col] = (avg - profile.mean[col]) / (profile.std[col] || 1);
+      }
     });
     if (missingFeature) {
       grid.innerHTML = '<div class="empty-state">Not enough stat coverage in this window to compute a match.</div>';
