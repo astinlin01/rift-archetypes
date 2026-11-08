@@ -137,6 +137,11 @@ class RiotClient:
         url = f"https://{self.region}.api.riotgames.com/lol/match/v5/matches/{match_id}"
         return self._get(url)
 
+    def get_match_timeline(self, match_id: str) -> dict:
+        """Pull the minute-by-minute timeline (participant frames + events) for a match ID."""
+        url = f"https://{self.region}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
+        return self._get(url)
+
     def get_account_by_riot_id(self, game_name: str, tag_line: str, region: str | None = None) -> dict:
         """Resolve Riot ID (gameName#tagLine) to a global account payload containing puuid."""
         target_region = region or self.region

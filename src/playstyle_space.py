@@ -26,10 +26,21 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import SplineTransformer
 
 from champion_classes import champion_class
-from feature_config import FEATURE_COLUMN_NAMES
+from feature_config import FEATURE_COLUMN_NAMES, add_team_context_features, lane_opponent_values
 
-GAME_STATE_COLUMNS = ("team_kill_diff_per_min", "team_gold_diff_per_min")
-OUTCOME_COVARIATES = ("win",) + GAME_STATE_COLUMNS
+# Game state is split into what the player did and what their teammates did:
+#     team lead = teammates' lead + own lane lead
+# where "teammates' lead" compares your 4 teammates against the 4 enemies other than your
+# lane opponent. The adjustment controls only for the teammates' part (outside your
+# control); your own lane lead -- and any win your style causes -- stays in as style.
+TEAM_STATE_COLUMNS = ("team_kill_diff_per_min", "team_gold_diff_per_min")
+LANE_STATE_COLUMNS = ("lane_kill_diff_per_min", "lane_gold_diff_per_min")
+TEAMMATE_STATE_COLUMNS = ("teammates_kill_diff_per_min", "teammates_gold_diff_per_min")
+GAME_STATE_COLUMNS = TEAM_STATE_COLUMNS + LANE_STATE_COLUMNS + TEAMMATE_STATE_COLUMNS
+STATE_COLUMNS = TEAMMATE_STATE_COLUMNS
+# Covariates used by models fitted before the teammates-only change (win flag + full team
+# lead). Kept so older saved artifacts still apply.
+LEGACY_STATE_COLUMNS = ("win",) + TEAM_STATE_COLUMNS
 # Game length enters the adjustment as a cubic spline (see fit_outcome_adjuster).
 LENGTH_SPLINE_KNOTS = 6
 # Champions with fewer games than this in a role share one adjustment with the rest of
@@ -49,19 +60,30 @@ CLUSTERING_EXCLUDED_DUPLICATES = frozenset(
     }
 )
 
-CLUSTER_FEATURE_COLUMNS = [c for c in FEATURE_COLUMN_NAMES if c not in CLUSTERING_EXCLUDED_DUPLICATES]
+# Kill-count features that mostly restate "got kills" (and depend heavily on how the game
+# went). kills_per_min and solo_kills stay as the style profile's kill dimension; these
+# remain in the feature table for percentile comparisons.
+STYLE_EXCLUDED_REDUNDANT = frozenset(
+    {"kda", "killing_sprees", "largest_killing_spree", "largest_multikill", "multikills"}
+)
+
+CLUSTER_FEATURE_COLUMNS = [
+    c for c in FEATURE_COLUMN_NAMES if c not in CLUSTERING_EXCLUDED_DUPLICATES | STYLE_EXCLUDED_REDUNDANT
+]
 
 
 def add_game_state_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Attach team kill/gold differential per minute to every row (no-op if present).
+    """Attach team / own-lane / teammates' kill and gold differentials per minute, plus
+    the team-context features (team_gold_share, lane_gold_diff_per_min). No-op if present.
 
     Must be called on the full feature table, not a subset of one player's rows.
 
     Derived from the feature table itself: within a match, the 5 rows sharing a `win`
-    value are one team. Rows whose opposing team is missing from the table (shouldn't
-    happen after build_features' remake filter, but possible for partial data) get 0,
-    i.e. "even game".
+    value are one team. Rows whose opposing team or lane opponent is missing from the
+    table (shouldn't happen after build_features' remake filter, but possible for partial
+    data or lane swaps) get 0 for that part, i.e. "even".
     """
+    df = add_team_context_features(df)
     if all(column in df.columns for column in GAME_STATE_COLUMNS):
         return df
 
@@ -76,13 +98,21 @@ def add_game_state_columns(df: pd.DataFrame) -> pd.DataFrame:
     merged["team_kill_diff_per_min"] = merged["kills_per_min_team"] - merged["kills_per_min_opp"]
     merged["team_gold_diff_per_min"] = merged["gold_earned_per_min_team"] - merged["gold_earned_per_min_opp"]
 
-    out = df.drop(columns=[c for c in GAME_STATE_COLUMNS if c in df.columns]).merge(
-        merged[["matchId", "win", *GAME_STATE_COLUMNS]],
+    out = df.drop(columns=[c for c in GAME_STATE_COLUMNS if c in df.columns and c not in LANE_STATE_COLUMNS]).merge(
+        merged[["matchId", "win", *TEAM_STATE_COLUMNS]],
         on=["matchId", "win"],
         how="left",
     )
-    for column in GAME_STATE_COLUMNS:
+    for column in TEAM_STATE_COLUMNS:
         out[column] = out[column].fillna(0.0)
+
+    # lane_gold_diff_per_min is also a style feature (computed in add_team_context_features);
+    # it's reused here as-is. Missing lane opponent -> 0 for the decomposition only.
+    out["lane_kill_diff_per_min"] = out["kills_per_min"] - lane_opponent_values(out, "kills_per_min")
+    for stat in ("kill", "gold"):
+        own = out[f"lane_{stat}_diff_per_min"].fillna(0.0)
+        out[f"teammates_{stat}_diff_per_min"] = out[f"team_{stat}_diff_per_min"] - own
+    out["lane_kill_diff_per_min"] = out["lane_kill_diff_per_min"].fillna(0.0)
     return out
 
 
@@ -91,15 +121,20 @@ def _game_minutes(df: pd.DataFrame) -> np.ndarray:
 
 
 def _covariate_matrix(
-    win_and_state: np.ndarray, minutes: np.ndarray, length_spline: SplineTransformer
+    state: np.ndarray, minutes: np.ndarray, length_spline: SplineTransformer
 ) -> np.ndarray:
-    return np.hstack([win_and_state, length_spline.transform(minutes)])
+    return np.hstack([state, length_spline.transform(minutes)])
 
 
-def _row_covariates(df: pd.DataFrame, length_spline: SplineTransformer) -> np.ndarray:
-    return _covariate_matrix(
-        df[list(OUTCOME_COVARIATES)].astype(float).to_numpy(), _game_minutes(df), length_spline
-    )
+def _row_covariates(
+    df: pd.DataFrame, length_spline: SplineTransformer, state_columns=STATE_COLUMNS
+) -> np.ndarray:
+    return _covariate_matrix(df[list(state_columns)].astype(float).to_numpy(), _game_minutes(df), length_spline)
+
+
+def _typical_state(state_columns) -> np.ndarray:
+    """The "typical game" state: even teams (0 lead); win=0.5 for legacy artifacts."""
+    return np.array([[0.5 if column == "win" else 0.0 for column in state_columns]])
 
 
 def champion_groups(champions: pd.Series, classes: dict[str, str], min_games: int) -> pd.Series:
@@ -134,8 +169,10 @@ def fit_outcome_adjuster(
 ) -> dict:
     """Fit the per-role feature-on-context regression. role_df must have game-state columns.
 
-    Covariates: win, team kill/gold differential per minute, and a smooth (cubic spline)
-    function of game length. Game length matters on its own: champion level, killing
+    Covariates: the teammates' kill/gold differential per minute (your 4 teammates vs the
+    4 enemies other than your lane opponent -- deliberately *not* the win flag or the full
+    team lead, so a style that wins games isn't subtracted out), and a smooth (cubic
+    spline) function of game length. Game length matters on its own: champion level, killing
     sprees, turret plates, max lane leads etc. are per-game totals/maxima that grow with
     length -- non-linearly (champion level follows the XP curve and caps at 18) -- and
     even per-minute rates like gold/min drift with it. Without this, the shortest games
@@ -154,8 +191,8 @@ def fit_outcome_adjuster(
     length_spline = SplineTransformer(
         n_knots=LENGTH_SPLINE_KNOTS, degree=3, knots="quantile", extrapolation="constant"
     ).fit(minutes)
-    covariates = _row_covariates(role_df, length_spline)
-    covariate_names = list(OUTCOME_COVARIATES) + ["game_minutes_spline"]
+    covariates = _row_covariates(role_df, length_spline, STATE_COLUMNS)
+    covariate_names = list(STATE_COLUMNS) + ["game_minutes_spline"]
 
     champion_terms: dict = {}
     if champion_classes is not None:
@@ -179,6 +216,7 @@ def fit_outcome_adjuster(
         "median_game_minutes": float(np.median(minutes)),
         "feature_medians": medians,
         "feature_columns": list(CLUSTER_FEATURE_COLUMNS),
+        "state_columns": list(STATE_COLUMNS),
         "covariates": covariate_names,
         **champion_terms,
     }
@@ -187,18 +225,20 @@ def fit_outcome_adjuster(
 def apply_outcome_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
     """Residualize rows' features against game context, keeping each feature's scale.
 
-    Residual + the prediction for a "typical game" (win=0.5, even teams, median game
-    length for the role, and -- if champion-adjusted -- the role's average champion mix)
-    keeps adjusted values in readable units, e.g. "champion level this game would have
-    had in an even, median-length game".
+    Residual + the prediction for a "typical game" (even teammates, median game length for
+    the role, and -- if champion-adjusted -- the role's average champion mix) keeps
+    adjusted values in readable units, e.g. "champion level this game would have had in
+    an even, median-length game".
     """
     columns = adjuster["feature_columns"]
+    # Artifacts saved before the teammates-only change have no "state_columns".
+    state_columns = adjuster.get("state_columns", LEGACY_STATE_COLUMNS)
     features = rows[columns].fillna(adjuster["feature_medians"])
     regression: LinearRegression = adjuster["regression"]
     length_spline: SplineTransformer = adjuster["length_spline"]
-    covariates = _row_covariates(rows, length_spline)
+    covariates = _row_covariates(rows, length_spline, state_columns)
     typical = _covariate_matrix(
-        np.array([[0.5] + [0.0] * len(GAME_STATE_COLUMNS)]),
+        _typical_state(state_columns),
         np.array([[adjuster["median_game_minutes"]]]),
         length_spline,
     )

@@ -46,12 +46,14 @@ def synthetic_role_df(seed: int = 0, games_per_champion: int = 400) -> pd.DataFr
                 "puuid": "styled" if styled else f"p{i % 37}",
                 "win": win,
                 "gameLength": float(rng.uniform(20, 38) * 60),
-                "team_kill_diff_per_min": float(rng.normal(0.2 if win else -0.2, 0.1)),
-                "team_gold_diff_per_min": float(rng.normal(80 if win else -80, 30)),
+                "teammates_kill_diff_per_min": float(rng.normal(0.2 if win else -0.2, 0.1)),
+                "teammates_gold_diff_per_min": float(rng.normal(80 if win else -80, 30)),
             }
             for column in CLUSTER_FEATURE_COLUMNS:
                 row[column] = float(rng.normal(1.0, 0.1))
-            row[FEATURE] = base + (STYLE_BONUS if styled else 0.0) + (50.0 if win else 0.0) + rng.normal(0, 40)
+            # Game-state effect: teammates being ahead inflates this player's stat (~+/-50).
+            game_state = 250.0 * row["teammates_kill_diff_per_min"]
+            row[FEATURE] = base + (STYLE_BONUS if styled else 0.0) + game_state + rng.normal(0, 40)
             rows.append(row)
     return pd.DataFrame(rows)
 
@@ -85,7 +87,8 @@ def test_style_signal_within_champion_survives():
 
 
 def test_outcome_still_removed():
-    # Wins add +50/min in the raw data; after adjustment win vs loss means should match.
+    # Winning teams' teammates are ahead, inflating the stat by ~+50/min in wins; after
+    # adjustment (for the teammates' lead) win vs loss means should match.
     out = adjusted(synthetic_role_df())
     by_win = out.groupby("win")[FEATURE].mean()
     assert abs(by_win[True] - by_win[False]) < 10

@@ -111,13 +111,50 @@ ALL_FEATURE_FIELDS: list[FeatureField] = (
 # camps) -- cs_per_min alone is minions only and reads ~0.3/min low for an ADC.
 DERIVED_FEATURE_COLUMNS = ["cs_total_per_min"]
 
-FEATURE_COLUMN_NAMES = [field.name for field in ALL_FEATURE_FIELDS] + DERIVED_FEATURE_COLUMNS
+# Features that need the whole match (all 10 participants), computed by
+# add_team_context_features on the full feature table:
+# - team_gold_share: your gold / your team's gold -- how much of the team's resources
+#   run through you ("carrying" vs "being carried").
+# - lane_gold_diff_per_min: your gold minus your lane opponent's, per minute -- your own
+#   lead, as opposed to your teammates'.
+TEAM_CONTEXT_FEATURE_COLUMNS = ["team_gold_share", "lane_gold_diff_per_min"]
+
+FEATURE_COLUMN_NAMES = (
+    [field.name for field in ALL_FEATURE_FIELDS] + DERIVED_FEATURE_COLUMNS + TEAM_CONTEXT_FEATURE_COLUMNS
+)
 
 
 def add_derived_features(df):
     """Compute DERIVED_FEATURE_COLUMNS in place-safe fashion (returns a new frame)."""
     df = df.copy()
     df["cs_total_per_min"] = df["cs_per_min"].fillna(0) + df["neutral_cs_per_min"].fillna(0)
+    return df
+
+
+def lane_opponent_values(df, column: str):
+    """For each row, `column`'s value for the lane opponent (same match and teamPosition,
+    other team), or NaN when there isn't exactly one on each side (e.g. a lane swap
+    tagged two players the same role). Teams are identified by `win`, as elsewhere."""
+    import pandas as pd
+
+    key = ["matchId", "teamPosition", "win"]
+    unique = df.groupby(["matchId", "teamPosition"])["win"].transform(
+        lambda s: s.nunique() == 2 and len(s) == 2
+    ).astype(bool)
+    opponents = df.loc[unique, key + [column]].copy()
+    opponents["win"] = ~opponents["win"].astype(bool)
+    merged = df[key].merge(opponents, on=key, how="left")
+    return pd.Series(merged[column].to_numpy(), index=df.index)
+
+
+def add_team_context_features(df):
+    """Compute TEAM_CONTEXT_FEATURE_COLUMNS (no-op if present). Needs the full table."""
+    if all(column in df.columns for column in TEAM_CONTEXT_FEATURE_COLUMNS):
+        return df
+    df = df.copy()
+    team_gold = df.groupby(["matchId", "win"])["gold_earned_per_min"].transform("sum")
+    df["team_gold_share"] = df["gold_earned_per_min"] / team_gold.where(team_gold > 0)
+    df["lane_gold_diff_per_min"] = df["gold_earned_per_min"] - lane_opponent_values(df, "gold_earned_per_min")
     return df
 
 
