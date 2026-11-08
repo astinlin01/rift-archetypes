@@ -20,6 +20,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
+from champion_classes import load_champion_classes
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, current_season
 from playstyle_space import (
     CLUSTER_FEATURE_COLUMNS,
@@ -92,7 +93,7 @@ def fit_role_cluster(
     pca_components: int,
     k_override: int | None,
 ) -> tuple[pd.DataFrame, dict]:
-    outcome_adjuster = fit_outcome_adjuster(role_df)
+    outcome_adjuster = fit_outcome_adjuster(role_df, champion_classes=load_champion_classes())
     matrix = apply_outcome_adjuster(role_df, outcome_adjuster)
 
     scaler = StandardScaler()

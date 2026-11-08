@@ -25,12 +25,16 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import SplineTransformer
 
+from champion_classes import champion_class
 from feature_config import FEATURE_COLUMN_NAMES
 
 GAME_STATE_COLUMNS = ("team_kill_diff_per_min", "team_gold_diff_per_min")
 OUTCOME_COVARIATES = ("win",) + GAME_STATE_COLUMNS
 # Game length enters the adjustment as a cubic spline (see fit_outcome_adjuster).
 LENGTH_SPLINE_KNOTS = 6
+# Champions with fewer games than this in a role share one adjustment with the rest of
+# their class (see champion_groups) -- too few games to estimate their own typical stats.
+MIN_CHAMPION_GAMES = 30
 
 # Exact or near-exact duplicates of another clustering feature (Riot's precomputed
 # per-minute value vs. our own division of the same total). Kept in the feature table
@@ -98,7 +102,36 @@ def _row_covariates(df: pd.DataFrame, length_spline: SplineTransformer) -> np.nd
     )
 
 
-def fit_outcome_adjuster(role_df: pd.DataFrame) -> dict:
+def champion_groups(champions: pd.Series, classes: dict[str, str], min_games: int) -> pd.Series:
+    """Champion name if it has >= min_games rows, else its class pool ("class:Mage")."""
+    counts = champions.value_counts()
+    common = set(counts[counts >= min_games].index)
+    return champions.map(lambda name: name if name in common else f"class:{champion_class(name, classes)}")
+
+
+def _champion_onehot(champions: pd.Series, adjuster: dict) -> np.ndarray:
+    """One-hot champion-group matrix for rows, using the groups seen at fit time.
+
+    A champion not seen at fit time falls back to its class pool; if the class pool wasn't
+    seen either, the row gets the population's champion mix, i.e. no champion adjustment.
+    """
+    levels: list[str] = adjuster["champion_group_levels"]
+    shares: np.ndarray = adjuster["champion_group_shares"]
+    index = {level: i for i, level in enumerate(levels)}
+    onehot = np.tile(shares, (len(champions), 1))
+    for row, name in enumerate(champions.to_numpy()):
+        group = name if name in index else f"class:{champion_class(name, adjuster['champion_classes'])}"
+        if group in index:
+            onehot[row] = 0.0
+            onehot[row, index[group]] = 1.0
+    return onehot
+
+
+def fit_outcome_adjuster(
+    role_df: pd.DataFrame,
+    champion_classes: dict[str, str] | None = None,
+    min_champion_games: int = MIN_CHAMPION_GAMES,
+) -> dict:
     """Fit the per-role feature-on-context regression. role_df must have game-state columns.
 
     Covariates: win, team kill/gold differential per minute, and a smooth (cubic spline)
@@ -107,6 +140,11 @@ def fit_outcome_adjuster(role_df: pd.DataFrame) -> dict:
     length -- non-linearly (champion level follows the XP curve and caps at 18) -- and
     even per-minute rates like gold/min drift with it. Without this, the shortest games
     formed their own "low everything" cluster.
+
+    With champion_classes, the champion played is a covariate too (one indicator per
+    champion, rare champions pooled by class), so residuals mean "how this game differs
+    from a typical game *on the same champion*" -- otherwise playstyle mostly reduces to
+    which champion was picked (Malphite always "tanks more" than Jinx).
     """
     medians = role_df[CLUSTER_FEATURE_COLUMNS].median(numeric_only=True)
     features = role_df[CLUSTER_FEATURE_COLUMNS].fillna(medians)
@@ -116,14 +154,33 @@ def fit_outcome_adjuster(role_df: pd.DataFrame) -> dict:
     length_spline = SplineTransformer(
         n_knots=LENGTH_SPLINE_KNOTS, degree=3, knots="quantile", extrapolation="constant"
     ).fit(minutes)
-    regression = LinearRegression().fit(_row_covariates(role_df, length_spline), features)
+    covariates = _row_covariates(role_df, length_spline)
+    covariate_names = list(OUTCOME_COVARIATES) + ["game_minutes_spline"]
+
+    champion_terms: dict = {}
+    if champion_classes is not None:
+        groups = champion_groups(role_df["championName"], champion_classes, min_champion_games)
+        levels = sorted(groups.unique())
+        onehot = (groups.to_numpy()[:, None] == np.array(levels)[None, :]).astype(float)
+        champion_terms = {
+            "champion_group_levels": levels,
+            # The population's champion mix -- the "typical game" champion (see apply).
+            "champion_group_shares": onehot.mean(axis=0),
+            "champion_classes": dict(champion_classes),
+            "champion_min_games": min_champion_games,
+        }
+        covariates = np.hstack([covariates, onehot])
+        covariate_names.append("champion_group")
+
+    regression = LinearRegression().fit(covariates, features)
     return {
         "regression": regression,
         "length_spline": length_spline,
         "median_game_minutes": float(np.median(minutes)),
         "feature_medians": medians,
         "feature_columns": list(CLUSTER_FEATURE_COLUMNS),
-        "covariates": list(OUTCOME_COVARIATES) + ["game_minutes_spline"],
+        "covariates": covariate_names,
+        **champion_terms,
     }
 
 
@@ -131,19 +188,24 @@ def apply_outcome_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
     """Residualize rows' features against game context, keeping each feature's scale.
 
     Residual + the prediction for a "typical game" (win=0.5, even teams, median game
-    length for the role) keeps adjusted values in readable units, e.g. "champion level
-    this game would have had in an even, median-length game".
+    length for the role, and -- if champion-adjusted -- the role's average champion mix)
+    keeps adjusted values in readable units, e.g. "champion level this game would have
+    had in an even, median-length game".
     """
     columns = adjuster["feature_columns"]
     features = rows[columns].fillna(adjuster["feature_medians"])
     regression: LinearRegression = adjuster["regression"]
     length_spline: SplineTransformer = adjuster["length_spline"]
-    predicted = regression.predict(_row_covariates(rows, length_spline))
+    covariates = _row_covariates(rows, length_spline)
     typical = _covariate_matrix(
         np.array([[0.5] + [0.0] * len(GAME_STATE_COLUMNS)]),
         np.array([[adjuster["median_game_minutes"]]]),
         length_spline,
     )
+    if "champion_group_levels" in adjuster:  # models fitted before champion adjustment lack this
+        covariates = np.hstack([covariates, _champion_onehot(rows["championName"], adjuster)])
+        typical = np.hstack([typical, adjuster["champion_group_shares"].reshape(1, -1)])
+    predicted = regression.predict(covariates)
     adjusted = features.to_numpy() - predicted + regression.predict(typical)
     return pd.DataFrame(adjusted, columns=columns, index=rows.index)
 
