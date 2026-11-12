@@ -277,16 +277,30 @@ TRAITS: list[tuple[str, tuple[str, ...]]] = [
     ("Crowd Control", ("cc_time_per_min",)),
     ("Damage Carry", ("damage_per_minute", "team_damage_pct")),
     ("Enchanter", ("heal_on_teammates_per_min", "shield_on_teammates_per_min")),
-    ("Vision Control", ("vision_score_per_minute", "wards_placed_per_min", "wards_killed_per_min", "control_wards_per_min")),
+    ("Vision Control", (
+        "vision_score_per_minute", "wards_placed_per_min", "wards_killed_per_min", "control_wards_per_min",
+        "early_wards_placed", "early_wards_killed", "early_control_wards",
+    )),
     ("Farm-Focused", ("cs_per_min", "lane_minions_first_10", "gold_earned_per_min")),
-    ("Lane Bully", ("max_cs_advantage_lane_opp", "max_level_lead_lane_opp", "turret_plates_taken")),
-    ("Duelist", ("solo_kills", "kills_per_min")),
-    ("Teamfighter", ("kill_participation", "assists_per_min")),
+    ("Lane Bully", (
+        "max_cs_advantage_lane_opp", "max_level_lead_lane_opp", "turret_plates_taken", "lane_gold_diff_per_min",
+        "cs_diff_at_10", "gold_diff_at_14", "xp_diff_at_14",
+    )),
+    ("Duelist", ("solo_kills", "kills_per_min", "early_solo_kills")),
+    ("Teamfighter", ("kill_participation", "assists_per_min", "early_kill_participation")),
     ("Split-Pusher", ("damage_to_buildings_per_min", "turret_takedowns_per_min")),
-    ("Objective Control", ("damage_to_objectives_per_min", "dragon_takedowns_per_min", "baron_takedowns_per_min")),
+    ("Objective Control", (
+        "damage_to_objectives_per_min", "dragon_takedowns_per_min", "baron_takedowns_per_min",
+        "early_objective_participation",
+    )),
     ("Jungle Farmer", ("neutral_cs_per_min",)),
     ("Skillshot Mage", ("skillshots_hit_per_min", "ability_uses_per_min")),
-    ("High-Risk", ("deaths_per_min",)),
+    # Named for what it measures: deaths carry no built-in payoff, so "High-Risk" overstated it.
+    ("Death-Prone", ("deaths_per_min", "early_deaths")),
+    # Trading in lane before 14:00 (damage dealt and absorbed), vs. farming passively.
+    ("Early Trading", ("damage_to_champions_at_14", "damage_taken_at_14")),
+    # Share of the team's gold: "the team plays through me" vs. "I play off the team".
+    ("Resource Priority", ("team_gold_share",)),
 ]
 
 # Traits that read as nonsense for a role (e.g. "Jungle Farmer" for a bot laner whose
@@ -331,7 +345,9 @@ TRAIT_PHRASES: dict[str, str] = {
     "Objective Control": "objective damage",
     "Jungle Farmer": "jungle camps",
     "Skillshot Mage": "ability usage",
-    "High-Risk": "deaths",
+    "Death-Prone": "deaths",
+    "Early Trading": "early trading",
+    "Resource Priority": "gold share",
 }
 
 # Role-specific named archetypes, each defined by a trait signature (+ = more of the
@@ -342,8 +358,8 @@ TRAIT_PHRASES: dict[str, str] = {
 ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
     "BOTTOM": {
         "Hyper-Carry": {"Damage Carry": 1, "Duelist": 1, "Split-Pusher": 0.5},
-        "Safe Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "High-Risk": -1, "Frontline": -0.7},
-        "Aggressive Skirmisher": {"High-Risk": 1, "Frontline": 1, "Duelist": 0.4, "Farm-Focused": -0.5},
+        "Safe Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "Death-Prone": -1, "Frontline": -0.7},
+        "Aggressive Skirmisher": {"Death-Prone": 1, "Frontline": 1, "Duelist": 0.4, "Farm-Focused": -0.5},
         "Vision-Focused Carry": {"Vision Control": 1, "Farm-Focused": 0.4},
         "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1, "Duelist": -0.5},
         "Utility Mage": {"Enchanter": 1, "Crowd Control": 1, "Teamfighter": 0.5},
@@ -352,7 +368,7 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
     "TOP": {
         "Carry Duelist": {"Duelist": 1, "Damage Carry": 1, "Lane Bully": 0.5},
         "Tank / Frontline": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.5, "Damage Carry": -0.5},
-        "Lane Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "High-Risk": -0.7},
+        "Lane Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "Death-Prone": -0.7},
         "Split-Pusher": {"Split-Pusher": 1, "Objective Control": 0.5, "Teamfighter": -0.7},
         "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
         "Vision-Focused": {"Vision Control": 1},
@@ -360,7 +376,7 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
     "JUNGLE": {
         "Carry Jungler": {"Damage Carry": 1, "Duelist": 1},
         "Tank / Engage": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.6},
-        "Farming Jungler": {"Jungle Farmer": 1, "High-Risk": -0.6, "Frontline": -0.4},
+        "Farming Jungler": {"Jungle Farmer": 1, "Death-Prone": -0.6, "Frontline": -0.4},
         "Vision / Enabler": {"Vision Control": 1, "Teamfighter": 0.6},
         "Objective-Focused": {"Objective Control": 1},
         "Ranged / Poke Jungler": {"Skillshot Mage": 1, "Vision Control": 0.6},
@@ -368,9 +384,9 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
     },
     "MIDDLE": {
         "Assassin / Carry": {"Duelist": 1, "Damage Carry": 1},
-        "Control Mage": {"Vision Control": 0.8, "Crowd Control": 0.8, "Farm-Focused": 0.6, "High-Risk": -0.7},
+        "Control Mage": {"Vision Control": 0.8, "Crowd Control": 0.8, "Farm-Focused": 0.6, "Death-Prone": -0.7},
         "Lane-Dominant Carry": {"Lane Bully": 1, "Farm-Focused": 0.7, "Split-Pusher": 0.5},
-        "Frontline Skirmisher": {"Frontline": 1, "High-Risk": 0.7},
+        "Frontline Skirmisher": {"Frontline": 1, "Death-Prone": 0.7},
         "Roaming Playmaker": {"Teamfighter": 1, "Crowd Control": 0.5, "Farm-Focused": -0.5},
         "Scaling Farmer": {"Farm-Focused": 1, "Lane Bully": 0.5, "Teamfighter": -0.5},
         "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
