@@ -1,4 +1,4 @@
-<title>River3 Scouting Report</title>
+<title>Scouting Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -503,8 +503,6 @@
   var ALL_ROLES = 'ALL';
   var SLOTS = ['var(--slot-0)', 'var(--slot-1)', 'var(--slot-2)', 'var(--slot-3)', 'var(--slot-4)', 'var(--slot-5)'];
 
-  document.title = 'River3 Scouting Report';
-
   var tooltip = document.getElementById('tooltip');
   function showTooltip(evt, html) {
     tooltip.innerHTML = html;
@@ -724,7 +722,9 @@
   }
 
   function renderHeader(filters, windowGames, champGames) {
-    document.getElementById('hdr-title').textContent = filters.account + ' — Scouting Report';
+    var title = filters.account + ' — Scouting Report';
+    document.getElementById('hdr-title').textContent = title;
+    document.title = title;  // browser tab follows the selected account too
     document.getElementById('hdr-sub').textContent =
       (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' season ' + DATA.season + ' ranked games on record for ' + filters.account + '.';
 

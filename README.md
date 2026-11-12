@@ -10,11 +10,18 @@ Rift Archetypes pulls ~26k season-16 high-elo solo queue games (~260k player-gam
 
 ## Building: from clusters to trait profiles
 
-The current k-means clusters hit a known limit. Even after the champion and teammate adjustments below, every non-support role splits mainly into *carry / farmer / low-resource*, with cluster win rates from 37% to 74%. That's a resource-share axis more than a playstyle. Low silhouette scores, and a k search that settles on its minimum, point to a continuum that k-means cuts arbitrarily. In progress:
+The current k-means clusters hit a known limit. Even after the champion and teammate adjustments below, every non-support role splits mainly into *carry / farmer / low-resource*, with cluster win rates from 37% to 74%. That's a resource-share axis more than a playstyle. Low silhouette scores, and a k search that settles on its minimum, point to a continuum that k-means cuts arbitrarily.
 
-- **Trait axes instead of clusters.** Each game gets trait scores (e.g. laning, vision, teamfighting) from the adjusted features, now including the early-game timeline features. A player's profile is their average, ranked as a percentile against peers with 10+ games in the role. k-means becomes an exploratory notebook tool.
+**Built and tested** (`src/style_profile.py`), not yet in the dashboard:
+
+- **Trait axes instead of clusters.** Each game gets trait scores (e.g. laning, vision, teamfighting, early trading) from the adjusted features, including the early-game timeline features where a timeline exists. A player's profile is their average, ranked as a percentile against peers with 10+ games in the role. k-means becomes an exploratory notebook tool.
 - **Soft archetype labels.** Your top matches with a match %, e.g. "72% Safe Farmer, 41% Vision-Focused Carry". These are labels, not boxes.
-- **Confidence per trait.** How much a single game reveals about a player, combined with how many games you've played, gives a low / medium / high reliability for each trait.
+- **Confidence per trait.** How much a single game reveals about a player (intraclass correlation), scaled up by how many games you've played (Spearman–Brown), gives a low / medium / high reliability for each trait.
+
+**Next:**
+
+- **Timeline backfill** for the season's matches, so early-game traits cover the whole reference population.
+- **Dashboard rewrite** around trait axes, soft labels and confidence, replacing the cluster cards and k slider.
 - **Champion pool as its own layer.** Your class mix and champion concentration, compared with the reference tier's.
 - **Fairer performance comparisons.** A class-matched reference, so a Jinx main isn't compared against every ADC game, plus a "biggest gaps" list against the selected tier.
 - **One source of truth.** Today the dashboard refits clusters separately from `models/`; the trait design removes that split.

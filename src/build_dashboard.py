@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the self-contained dashboard HTML file.")
     parser.add_argument("--template-path", default="dashboard/template.html")
     parser.add_argument("--data-path", default="data/processed/dashboard_data.json")
-    parser.add_argument("--output-path", default="dashboard/river3_scouting_report.html")
+    parser.add_argument("--output-path", default="dashboard/scouting_report.html")
     return parser.parse_args()
 
 
