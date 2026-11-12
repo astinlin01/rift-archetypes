@@ -13,7 +13,7 @@ role, reference tier, and cluster count entirely client-side with no
 server/recompute step.
 
 Run from repo root:
-    python src/export_dashboard_data.py --riot-id "river3#na1" --riot-id "river#ell"
+    python src/export_dashboard_data.py --riot-id "yourname#na1" --riot-id "smurf#na1"
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ import requests
 from sklearn.cluster import KMeans
 
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
+from accounts import require_riot_ids
 from pipeline_io import iter_ndjson
 from playstyle_space import (
     add_game_state_columns,
@@ -54,7 +55,6 @@ MIN_PRO_GAMES_FOR_REFERENCE = 5
 # (MIN_REFERENCE_SAMPLE) would rule every league out.
 MIN_PRO_REFERENCE_SAMPLE = 8
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
-DEFAULT_RIOT_IDS = ["river3#na1", "river#ell", "riverell#888", "riverell#ttv", "xlsteemo#na1"]
 PCA_AXIS_TOP_N = 3
 ALL_ROLES_KEY = "ALL"
 
@@ -119,7 +119,7 @@ def parse_args() -> argparse.Namespace:
         "--riot-id",
         action="append",
         default=None,
-        help="Riot ID to include, e.g. 'river3#na1'. Repeatable. Defaults to both configured accounts.",
+        help="Riot ID to include, e.g. 'yourname#na1'. Repeatable. Defaults to RIOT_IDS in .env.",
     )
     parser.add_argument("--population-sample", type=int, default=500, help="Scatter background points per role.")
     parser.add_argument("--pro-features-path", default="data/processed/pro_player_features.parquet")
@@ -128,7 +128,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_puuid_from_match_ids(match_ids_path: str, riot_id: str) -> str:
-    # Riot IDs are case-insensitive ("river3#NA1" and "river3#na1" are one account).
+    # Riot IDs are case-insensitive ("name#NA1" and "name#na1" are one account).
     wanted = riot_id.strip().lower()
     for row in iter_ndjson(match_ids_path):
         if str(row.get("source_riot_id", "")).strip().lower() == wanted:
@@ -453,7 +453,7 @@ def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
 
 def run(args: argparse.Namespace) -> None:
     df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
-    riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
+    riot_ids = require_riot_ids(args.riot_id)
 
     # Everything -- reference curves, clustering population, and your own games -- is
     # restricted to one season so you're never compared across a stat-baseline shift.

@@ -10,7 +10,7 @@ already-fetched match IDs/details are skipped.
 
 Run from repo root:
     python src/fetch_recent_self.py                        # all available history
-    python src/fetch_recent_self.py --riot-id "river3#na1" --max-games 50
+    python src/fetch_recent_self.py --riot-id "yourname#na1" --max-games 50
 """
 
 from __future__ import annotations
@@ -27,16 +27,8 @@ from pipeline_io import (
     ndjson_file_exists,
     utc_now_iso,
 )
+from accounts import require_riot_ids
 from riot_client import RiotClient
-
-# Mirrors fetch_match_ids.py's always-include accounts.
-DEFAULT_RIOT_IDS = [
-    "river3#na1",
-    "river#ell",
-    "riverell#888",
-    "riverell#ttv",
-    "xlsteemo#na1",
-]
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         "--riot-id",
         action="append",
         default=[],
-        help="Riot ID(s) as gameName#tagLine. Repeatable. Defaults to the built-in accounts.",
+        help="Riot ID(s) as gameName#tagLine. Repeatable. Defaults to RIOT_IDS in .env.",
     )
     parser.add_argument("--match-ids-path", default="data/raw/match_ids.ndjson")
     parser.add_argument("--matches-path", default="data/raw/matches.ndjson")
@@ -75,7 +67,7 @@ def status_code_from_http_error(error: requests.HTTPError) -> int | None:
 
 
 def run(args: argparse.Namespace) -> None:
-    riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
+    riot_ids = require_riot_ids(args.riot_id)
     client = RiotClient(platform=args.platform)
     start_time = None
     if args.since:

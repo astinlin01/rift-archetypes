@@ -21,17 +21,10 @@ from pipeline_io import (
     save_json_atomic,
     utc_now_iso,
 )
+from accounts import default_riot_ids
 from riot_client import RiotClient
 
 
-# Always include these personal accounts even if they are outside the ranked pool slice.
-DEFAULT_ALWAYS_INCLUDE_RIOT_IDS = [
-    "river3#na1",
-    "river#ell",
-    "riverell#888",
-    "riverell#ttv",
-    "xlsteemo#na1",
-]
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-default-riot-ids",
         action="store_true",
-        help="Disable built-in always-include Riot IDs.",
+        help="Do not always-include your own accounts (RIOT_IDS in .env).",
     )
     parser.add_argument("--resume", action="store_true")
     return parser.parse_args()
@@ -246,7 +239,8 @@ def run(args: argparse.Namespace) -> None:
     extra_puuids = load_extra_puuids(args.include_puuid, args.include_puuid_file)
     extra_puuid_rows = merge_with_extra_puuids([], extra_puuids)
 
-    riot_ids = [] if args.skip_default_riot_ids else list(DEFAULT_ALWAYS_INCLUDE_RIOT_IDS)
+    # Always include your own accounts (RIOT_IDS) even if they fall outside the ranked pool slice.
+    riot_ids = [] if args.skip_default_riot_ids else default_riot_ids()
     riot_ids.extend(args.include_riot_id)
     riot_id_rows = resolve_riot_ids_to_rows(client, riot_ids)
 

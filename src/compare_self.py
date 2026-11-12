@@ -4,7 +4,7 @@ per-feature averages against a reference tier (Challenger by default).
 
 Run from repo root:
     python src/compare_self.py --puuid <your puuid>
-    python src/compare_self.py --riot-id "river3#na1"
+    python src/compare_self.py --riot-id "yourname#na1"
 """
 
 from __future__ import annotations
@@ -18,20 +18,13 @@ from scipy.stats import percentileofscore
 
 from feature_config import FEATURE_COLUMN_NAMES, VALID_ROLES, add_derived_features, current_season
 from playstyle_space import add_game_state_columns, to_playstyle_space
+from accounts import require_riot_ids
 from riot_client import RiotClient
 
 FEATURE_COLUMNS = FEATURE_COLUMN_NAMES
 # Percentiles rank your average against other players' averages (not single games,
 # whose much wider spread would understate how far from typical an average is).
 MIN_REFERENCE_PLAYER_GAMES = 10
-
-# Mirrors fetch_match_ids.py's always-include accounts.
-DEFAULT_RIOT_IDS = [
-    "river3#na1",
-    "river#ell",
-    "riverell#888",
-]
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare your matches against learned clusters.")
@@ -43,13 +36,13 @@ def parse_args() -> argparse.Namespace:
         "--puuid",
         action="append",
         default=[],
-        help="Your puuid(s). Repeatable. If omitted, resolves --riot-id / defaults instead.",
+        help="Your puuid(s). Repeatable. If omitted, resolves --riot-id / RIOT_IDS instead.",
     )
     parser.add_argument(
         "--riot-id",
         action="append",
         default=[],
-        help="Your Riot ID(s) as gameName#tagLine. Repeatable.",
+        help="Your Riot ID(s) as gameName#tagLine. Repeatable. Defaults to RIOT_IDS in .env.",
     )
     parser.add_argument("--output-csv", default="data/processed/self_comparison.csv")
     return parser.parse_args()
@@ -59,7 +52,7 @@ def resolve_puuids(args: argparse.Namespace) -> list[str]:
     if args.puuid:
         return args.puuid
 
-    riot_ids = args.riot_id if args.riot_id else DEFAULT_RIOT_IDS
+    riot_ids = require_riot_ids(args.riot_id)
     client = RiotClient(platform=args.platform)
     puuids: list[str] = []
     for riot_id in riot_ids:
