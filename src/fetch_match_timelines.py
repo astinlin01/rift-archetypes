@@ -19,7 +19,8 @@ import os
 import pandas as pd
 import requests
 
-from compare_self import DEFAULT_RIOT_IDS, resolve_puuids
+from accounts import ENV_VAR
+from compare_self import resolve_puuids
 from feature_config import current_season
 from fetch_match_details import REPRESENTATIVE_PLATFORM_BY_REGION, region_for_match_id
 from pipeline_io import append_ndjson, utc_now_iso
@@ -34,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--failures-path", default="data/raw/failures/timeline_failures.ndjson")
     parser.add_argument("--platform", default="na1", help="Fallback platform for unrecognized match ID prefixes.")
     parser.add_argument("--puuid", action="append", default=[])
-    parser.add_argument("--riot-id", action="append", default=[], help=f"Defaults to {DEFAULT_RIOT_IDS}.")
+    parser.add_argument("--riot-id", action="append", default=[], help=f"Defaults to {ENV_VAR} in .env.")
     parser.add_argument("--min-player-games", type=int, default=10)
     parser.add_argument("--all", action="store_true", help="Fetch every current-season match, not just the subset.")
     parser.add_argument("--max-matches", type=int, default=0, help="Stop after this many fetches (0 = no cap).")
