@@ -48,3 +48,53 @@ def champion_class(champion_name: str | None, classes: dict[str, str]) -> str:
     if not champion_name:
         return UNKNOWN_CLASS
     return classes.get(str(champion_name).lower(), UNKNOWN_CLASS)
+
+
+# ---------- Support subclasses (UTILITY only) ----------
+#
+# Data Dragon tags lump most supports into "Support" (Lulu, Thresh, Pyke alike) or
+# "Tank", which says little about how a support plays. In UTILITY this hand-curated map
+# takes precedence; elsewhere (Karma mid, Lux mid) the primary tag still applies.
+# Supports not listed fall back to their primary tag (Pantheon -> Fighter, Elise ->
+# Assassin). Keys are lowercased match-v5 championName spellings. Add new supports here.
+#   Enchanter: heals, shields, buffs      Pick: hooks / long-range catch CC
+#   Tank: engage and peel                 Mage: damage and poke
+SUPPORT_SUBCLASSES: dict[str, str] = {
+    **dict.fromkeys(
+        ["lulu", "nami", "janna", "sona", "yuumi", "milio", "soraka", "seraphine", "renata", "karma", "zilean"],
+        "Enchanter",
+    ),
+    **dict.fromkeys(["thresh", "blitzcrank", "bard", "rakan", "morgana", "neeko", "pyke"], "Pick"),
+    **dict.fromkeys(
+        [
+            "nautilus", "alistar", "rell", "leona", "braum", "poppy", "shen", "maokai", "tahmkench",
+            "galio", "amumu", "skarner", "sion", "zac", "taric",
+        ],
+        "Tank",
+    ),
+    **dict.fromkeys(
+        [
+            "lux", "swain", "velkoz", "zyra", "xerath", "brand", "zoe", "hwei", "mel", "anivia",
+            "lissandra", "taliyah", "sylas", "fiddlesticks",
+        ],
+        "Mage",
+    ),
+    # Data Dragon's primary tag is "Support", but she's played for damage.
+    "senna": "Marksman",
+}
+SUPPORT_ROLE = "UTILITY"
+
+
+def role_champion_class(
+    champion_name: str | None,
+    role: str | None,
+    classes: dict[str, str],
+    support_overrides: dict[str, str] = SUPPORT_SUBCLASSES,
+) -> str:
+    """Class used by the champion-pool layer: the support subclass in UTILITY if the
+    champion is mapped, otherwise the primary Data Dragon tag."""
+    if role == SUPPORT_ROLE and champion_name:
+        override = support_overrides.get(str(champion_name).lower())
+        if override:
+            return override
+    return champion_class(champion_name, classes)
