@@ -181,3 +181,33 @@ def test_profile_reliability_grows_with_games():
 @pytest.mark.parametrize("reliability, label", [(0.3, "low"), (0.6, "medium"), (0.85, "high")])
 def test_confidence_labels(reliability, label):
     assert confidence_label(reliability) == label
+
+
+# --- Trait mapping --------------------------------------------------------------------------------
+
+def test_no_objective_control_trait():
+    # Dropped: for laners, objective damage duplicates building damage (corr 0.81-0.90,
+    # it includes towers) and the epic share is mostly game-to-game noise; for junglers
+    # the share is at 100% in 75% of games, so it can't tell players apart. Objective
+    # participation stays in the performance gap list instead.
+    from playstyle_space import TRAITS
+
+    assert "Objective Control" not in dict(TRAITS)
+
+
+def test_archetypes_only_use_existing_traits():
+    from playstyle_space import ROLE_ARCHETYPES, TRAIT_PHRASES, TRAITS
+
+    traits = set(dict(TRAITS))
+    for role, archetypes in ROLE_ARCHETYPES.items():
+        for name, signature in archetypes.items():
+            assert set(signature) <= traits, f"{role} {name}: {set(signature) - traits}"
+    assert set(TRAIT_PHRASES) == traits
+
+
+def test_split_pusher_uses_own_building_damage_only():
+    # Turret takedowns per minute correlate 0.60 with winning (mostly team-driven);
+    # damage to buildings is the player's own output, and counts towers you didn't finish.
+    from playstyle_space import TRAITS
+
+    assert dict(TRAITS)["Split-Pusher"] == ("damage_to_buildings_per_min",)

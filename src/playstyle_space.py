@@ -288,11 +288,12 @@ TRAITS: list[tuple[str, tuple[str, ...]]] = [
     )),
     ("Duelist", ("solo_kills", "kills_per_min", "early_solo_kills")),
     ("Teamfighter", ("kill_participation", "assists_per_min", "early_kill_participation")),
-    ("Split-Pusher", ("damage_to_buildings_per_min", "turret_takedowns_per_min")),
-    ("Objective Control", (
-        "damage_to_objectives_per_min", "dragon_takedowns_per_min", "baron_takedowns_per_min",
-        "early_objective_participation",
-    )),
+    # Own building damage only: turret takedown counts mostly track whether the team won.
+    ("Split-Pusher", ("damage_to_buildings_per_min",)),
+    # No "Objective Control" trait: objective damage duplicates building damage for laners
+    # (it includes towers), the epic-objective share is mostly game-to-game noise, and
+    # junglers sit at 100% of it in most games. Objective participation is a performance
+    # gap stat instead (performance.GAP_FEATURES).
     ("Jungle Farmer", ("neutral_cs_per_min",)),
     ("Skillshot Mage", ("skillshots_hit_per_min", "ability_uses_per_min")),
     # Named for what it measures: deaths carry no built-in payoff, so "High-Risk" overstated it.
@@ -342,7 +343,6 @@ TRAIT_PHRASES: dict[str, str] = {
     "Duelist": "kills & solo kills",
     "Teamfighter": "kill participation",
     "Split-Pusher": "tower damage",
-    "Objective Control": "objective damage",
     "Jungle Farmer": "jungle camps",
     "Skillshot Mage": "ability usage",
     "Death-Prone": "deaths",
@@ -369,7 +369,7 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
         "Carry Duelist": {"Duelist": 1, "Damage Carry": 1, "Lane Bully": 0.5},
         "Tank / Frontline": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.5, "Damage Carry": -0.5},
         "Lane Farmer": {"Farm-Focused": 1, "Lane Bully": 0.7, "Death-Prone": -0.7},
-        "Split-Pusher": {"Split-Pusher": 1, "Objective Control": 0.5, "Teamfighter": -0.7},
+        "Split-Pusher": {"Split-Pusher": 1, "Teamfighter": -0.7},
         "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1},
         "Vision-Focused": {"Vision Control": 1},
     },
@@ -378,7 +378,6 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
         "Tank / Engage": {"Frontline": 1, "Crowd Control": 0.8, "Teamfighter": 0.6},
         "Farming Jungler": {"Jungle Farmer": 1, "Death-Prone": -0.6, "Frontline": -0.4},
         "Vision / Enabler": {"Vision Control": 1, "Teamfighter": 0.6},
-        "Objective-Focused": {"Objective Control": 1},
         "Ranged / Poke Jungler": {"Skillshot Mage": 1, "Vision Control": 0.6},
         "Low-Resource": {"Damage Carry": -1, "Jungle Farmer": -1},
     },
