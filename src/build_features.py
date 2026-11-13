@@ -108,6 +108,56 @@ def build_tier_lookup(league_entries_glob: str) -> dict[str, dict[str, str]]:
     return info_by_puuid
 
 
+EPIC_MONSTERS = ("dragon", "riftHerald", "baron")
+EPIC_TAKEDOWN_FIELDS = ("challenges.dragonTakedowns", "challenges.riftHeraldTakedowns", "challenges.baronTakedowns")
+
+
+def _epic_takedowns(participant: dict) -> int:
+    return sum(get_nested(participant, path) or 0 for path in EPIC_TAKEDOWN_FIELDS)
+
+
+def _turret_takedowns(participant: dict) -> int:
+    return get_nested(participant, "challenges.turretTakedowns") or 0
+
+
+def team_objective_totals(info: dict) -> dict:
+    """{teamId: {"epic": dragons + Heralds + Barons taken, "tower": towers destroyed}}.
+
+    Riot's team counts (info.teams[].objectives) are occasionally lower than a player's
+    own takedowns in the same game (~0.07% of games; e.g. 2 turret takedowns on a team
+    credited with 1 tower). A team can't take fewer objectives than one of its players
+    took part in, so the total is raised to the largest teammate's count.
+    """
+    totals = {}
+    for team in info.get("teams", []):
+        team_id = team.get("teamId")
+        objectives = team.get("objectives", {})
+        members = [p for p in info.get("participants", []) if p.get("teamId") == team_id]
+        totals[team_id] = {
+            "epic": max(
+                [sum(objectives.get(m, {}).get("kills", 0) for m in EPIC_MONSTERS)]
+                + [_epic_takedowns(p) for p in members]
+            ),
+            "tower": max([objectives.get("tower", {}).get("kills", 0)] + [_turret_takedowns(p) for p in members]),
+        }
+    return totals
+
+
+def objective_shares(participant: dict, team_totals: dict | None) -> dict:
+    """Share of the team's epic monsters (dragon/Herald/Baron) and towers the participant
+    took part in. NaN when the team took none -- undefined, not 0%. Void grubs are left
+    out: match-v5 has no per-player grub takedown count."""
+    nan = float("nan")
+    if not team_totals:
+        return {"epic_objective_participation": nan, "turret_participation": nan}
+    epic = _epic_takedowns(participant)
+    towers = _turret_takedowns(participant)
+    return {
+        "epic_objective_participation": epic / team_totals["epic"] if team_totals["epic"] else nan,
+        "turret_participation": towers / team_totals["tower"] if team_totals["tower"] else nan,
+    }
+
+
 def extract_participant_row(
     match_id: str,
     queue_id: int,
@@ -115,6 +165,7 @@ def extract_participant_row(
     participant: dict,
     info_by_puuid: dict[str, dict[str, str]],
     min_game_length_seconds: int,
+    team_totals: dict | None = None,
 ) -> dict | None:
     team_position = participant.get("teamPosition")
     if team_position not in VALID_ROLES:
@@ -149,6 +200,7 @@ def extract_participant_row(
             value = value / minutes
         row[field.name] = value
 
+    row.update(objective_shares(participant, team_totals))
     return row
 
 
@@ -175,9 +227,11 @@ def build_feature_rows(
             "season": season_from_patch(patch),
         }
 
+        totals_by_team = team_objective_totals(info)
         for participant in participants:
             row = extract_participant_row(
-                match_id, queue_id, match_context, participant, info_by_puuid, min_game_length_seconds
+                match_id, queue_id, match_context, participant, info_by_puuid, min_game_length_seconds,
+                totals_by_team.get(participant.get("teamId")),
             )
             if row is not None:
                 rows.append(row)

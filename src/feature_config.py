@@ -119,8 +119,16 @@ DERIVED_FEATURE_COLUMNS = ["cs_total_per_min"]
 #   lead, as opposed to your teammates'.
 TEAM_CONTEXT_FEATURE_COLUMNS = ["team_gold_share", "lane_gold_diff_per_min"]
 
+# Share of the team's objectives the player took part in (build_features.objective_shares):
+# a takedown *count* mostly measures how many objectives the team took, i.e. whether it
+# was winning; the share measures whether you showed up, like kill participation does.
+OBJECTIVE_SHARE_FEATURE_COLUMNS = ["epic_objective_participation", "turret_participation"]
+
 FEATURE_COLUMN_NAMES = (
-    [field.name for field in ALL_FEATURE_FIELDS] + DERIVED_FEATURE_COLUMNS + TEAM_CONTEXT_FEATURE_COLUMNS
+    [field.name for field in ALL_FEATURE_FIELDS]
+    + DERIVED_FEATURE_COLUMNS
+    + TEAM_CONTEXT_FEATURE_COLUMNS
+    + OBJECTIVE_SHARE_FEATURE_COLUMNS
 )
 
 
