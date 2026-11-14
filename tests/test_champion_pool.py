@@ -113,3 +113,13 @@ def test_class_share_percentile_counts_ties_half():
     assert pct["Tank"] == pytest.approx(62.5)
     # A class I never play counts as a 0% share, not missing: 0 vs [1, 1, .5, 0] -> 12.5.
     assert pct["Mage"] == pytest.approx(12.5)
+
+
+def test_senna_is_a_marksman_in_every_role():
+    # Data Dragon's primary tag is "Support", but she's played for damage in both bot
+    # lane and support (real classes file: the override must win over the tag).
+    from champion_classes import load_champion_classes
+
+    classes = load_champion_classes()
+    for role in ["BOTTOM", "UTILITY", "MIDDLE"]:
+        assert role_champion_class("Senna", role, classes) == "Marksman"

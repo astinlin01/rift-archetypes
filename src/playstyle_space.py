@@ -166,6 +166,7 @@ def fit_outcome_adjuster(
     role_df: pd.DataFrame,
     champion_classes: dict[str, str] | None = None,
     min_champion_games: int = MIN_CHAMPION_GAMES,
+    feature_columns: list[str] | None = None,
 ) -> dict:
     """Fit the per-role feature-on-context regression. role_df must have game-state columns.
 
@@ -182,9 +183,12 @@ def fit_outcome_adjuster(
     champion, rare champions pooled by class), so residuals mean "how this game differs
     from a typical game *on the same champion*" -- otherwise playstyle mostly reduces to
     which champion was picked (Malphite always "tanks more" than Jinx).
+
+    feature_columns defaults to the clustering features; the performance view passes its own.
     """
-    medians = role_df[CLUSTER_FEATURE_COLUMNS].median(numeric_only=True)
-    features = role_df[CLUSTER_FEATURE_COLUMNS].fillna(medians)
+    columns = list(feature_columns) if feature_columns is not None else list(CLUSTER_FEATURE_COLUMNS)
+    medians = role_df[columns].astype(float).median()
+    features = role_df[columns].astype(float).fillna(medians)
     minutes = _game_minutes(role_df)
     # Knots at length quantiles so the curve has resolution where games actually are;
     # constant extrapolation keeps unusually short/long games from blowing up.
@@ -215,7 +219,7 @@ def fit_outcome_adjuster(
         "length_spline": length_spline,
         "median_game_minutes": float(np.median(minutes)),
         "feature_medians": medians,
-        "feature_columns": list(CLUSTER_FEATURE_COLUMNS),
+        "feature_columns": columns,
         "state_columns": list(STATE_COLUMNS),
         "covariates": covariate_names,
         **champion_terms,

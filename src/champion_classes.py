@@ -79,9 +79,11 @@ SUPPORT_SUBCLASSES: dict[str, str] = {
         ],
         "Mage",
     ),
-    # Data Dragon's primary tag is "Support", but she's played for damage.
-    "senna": "Marksman",
 }
+# Overrides for every role: champions whose primary Data Dragon tag misdescribes how
+# they're played anywhere. Senna is tagged "Support" but played for damage in bot lane
+# and as a support alike.
+ROLE_INDEPENDENT_OVERRIDES: dict[str, str] = {"senna": "Marksman"}
 SUPPORT_ROLE = "UTILITY"
 
 
@@ -92,9 +94,11 @@ def role_champion_class(
     support_overrides: dict[str, str] = SUPPORT_SUBCLASSES,
 ) -> str:
     """Class used by the champion-pool layer: the support subclass in UTILITY if the
-    champion is mapped, otherwise the primary Data Dragon tag."""
-    if role == SUPPORT_ROLE and champion_name:
-        override = support_overrides.get(str(champion_name).lower())
-        if override:
-            return override
+    champion is mapped, else a role-independent override (Senna), else the primary
+    Data Dragon tag."""
+    key = str(champion_name).lower() if champion_name else ""
+    if role == SUPPORT_ROLE and key in support_overrides:
+        return support_overrides[key]
+    if key in ROLE_INDEPENDENT_OVERRIDES:
+        return ROLE_INDEPENDENT_OVERRIDES[key]
     return champion_class(champion_name, classes)

@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scouting Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -274,24 +279,7 @@
   .league-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .pro-sample-note { font-size: 12px; color: var(--ink-muted); }
 
-  /* ---------- Archetype cards ---------- */
   .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-  .arch-card { padding: 18px 18px 20px; }
-  .arch-card .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; flex-shrink: 0; }
-  .arch-card h3 { font-size: 17px; display: flex; align-items: center; }
-  .meter-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-muted); margin-top: 16px; }
-  .meter-track { height: 8px; border-radius: 5px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
-  .meter-fill { height: 100%; border-radius: 5px; }
-  .arch-stat { margin-top: 14px; display: flex; align-items: baseline; gap: 8px; }
-  .arch-stat .n { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 26px; }
-  .arch-stat .of { font-size: 12.5px; color: var(--ink-muted); }
-  .arch-compare { margin-top: 10px; display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; border-top: 1px solid var(--gridline); }
-  .arch-compare .your-wr { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 18px; }
-  .arch-compare .your-wr.above { color: var(--good); }
-  .arch-compare .your-wr.below { color: var(--critical); }
-  .arch-compare .your-wr.over { color: var(--div-pos); }
-  .arch-compare .your-wr.under { color: var(--div-neg); }
-  .arch-compare .label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
   .pro-match-card { padding: 16px 18px 18px; }
   .pro-match-rank { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 13px; color: var(--accent-jade); }
@@ -302,16 +290,6 @@
   .pro-match-sim .of { font-size: 12px; color: var(--ink-muted); }
   .pro-match-champs { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
   .pro-match-champ { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); background: var(--surface-2); border-radius: 999px; padding: 3px 9px 3px 4px; }
-
-  /* ---------- Scatter ---------- */
-  .scatter-panel { padding: 18px; }
-  .scatter-svg { width: 100%; height: auto; display: block; overflow: visible; }
-  .scatter-pop { fill: var(--ink-muted); opacity: 0.28; }
-  .scatter-mine { cursor: pointer; }
-  .scatter-mine circle.hit { fill: transparent; }
-  .scatter-axis-caption { font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
-  .scatter-axis-caption strong { color: var(--ink-2); font-weight: 600; }
-  .scatter-captions { display: flex; flex-direction: column; gap: 4px; padding: 4px 4px 14px; }
 
   /* ---------- Table ---------- */
   .table-wrap { overflow-x: auto; }
@@ -328,8 +306,6 @@
   .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
   .pill.win { background: color-mix(in oklab, var(--good) 16%, transparent); color: var(--good); }
   .pill.loss { background: color-mix(in oklab, var(--critical) 16%, transparent); color: var(--critical); }
-  .arch-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
-  .arch-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .champ-cell { display: inline-flex; align-items: center; gap: 8px; }
   .champ-icon { width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; display: block; object-fit: cover; }
   .champ-icon.sm { width: 18px; height: 18px; border-radius: 4px; }
@@ -361,7 +337,83 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
+
+  /* ---------- At a glance ---------- */
+  .glance { margin-top: 28px; padding: 18px 22px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px; }
+  .glance .g-label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .glance .g-main { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 20px; margin-top: 4px; line-height: 1.25; }
+  .glance .g-line { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+  .glance .g-line .champ-icon { display: inline-block; vertical-align: -4px; margin-right: 4px; }
+  @media (max-width: 720px) { .glance { grid-template-columns: 1fr; } }
+
+  /* ---------- Style profile ---------- */
+  .labels-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--gridline); }
+  .labels-row .hint { font-size: 12.5px; color: var(--ink-muted); }
+  .label-chip { display: inline-flex; align-items: baseline; gap: 7px; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 13.5px;
+    background: color-mix(in oklab, var(--accent-jade) 15%, transparent); color: var(--ink); }
+  .label-chip .pctv { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 16px; color: var(--accent-jade); }
+  .label-chip.secondary { background: var(--surface-2); }
+  .label-chip.secondary .pctv { color: var(--ink-2); }
+  .notice { padding: 10px 22px; font-size: 12.5px; color: var(--ink-2); border-bottom: 1px solid var(--gridline);
+    background: color-mix(in oklab, var(--slot-3) 13%, transparent); }
+  .divbar-row.style-row { grid-template-columns: 150px 1fr 52px 92px; }
+  .conf { font-size: 12px; color: var(--ink-muted); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  .conf .dots { letter-spacing: 1px; color: var(--accent-jade); font-size: 11px; }
+  .muted-list { padding: 0 22px 16px; font-size: 12.5px; color: var(--ink-muted); }
+  /* Phones: name, value and confidence on one line, the bar full-width underneath. */
+  @media (max-width: 720px) {
+    .filter-bar { padding: 0 20px; }
+    .kpi .value { font-size: 22px; overflow-wrap: anywhere; }
+    .divbar-row, .divbar-row.style-row, .divbar-row.marker-row { grid-template-columns: 1fr auto auto; row-gap: 6px; }
+    .divbar-row .divbar-label { grid-row: 1; grid-column: 1; }
+    .divbar-row .divbar-value { grid-row: 1; grid-column: 2; }
+    .divbar-row .conf { grid-row: 1; grid-column: 3; }
+    .divbar-row > .divbar-track, .divbar-row > .pctbar-track, .divbar-row > .marker-track { grid-row: 2; grid-column: 1 / -1; }
+    .mix-row { grid-template-columns: 84px 1fr 1fr; gap: 10px; }
+  }
+
+  /* ---------- Raw vs on-your-champions markers ---------- */
+  .divbar-row.marker-row { grid-template-columns: 168px 1fr 92px; }
+  .marker-track { position: relative; height: 16px; border-radius: 4px; background: var(--surface-2); }
+  .marker-link { position: absolute; top: 50%; height: 2px; transform: translateY(-50%); background: var(--ink-muted); opacity: 0.5; }
+  .marker { position: absolute; top: 50%; cursor: pointer; outline: none; }
+  .marker.raw { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--ink-2); background: var(--surface); transform: translate(-50%, -50%); }
+  .marker.adj { width: 11px; height: 11px; background: var(--accent); transform: translate(-50%, -50%) rotate(45deg); }
+  .marker:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .legend-marker { display: inline-block; }
+  .legend-marker.raw { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ink-2); }
+  .legend-marker.adj { width: 9px; height: 9px; background: var(--accent); transform: rotate(45deg); }
+
+  /* ---------- Biggest gaps ---------- */
+  .gap-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .gap-card { padding: 16px 18px 18px; }
+  .gap-card .theme { font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 12.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--critical); }
+  .gap-card h3 { font-size: 17px; margin-top: 3px; }
+  .gap-card .gap-pct { margin-top: 10px; display: flex; align-items: baseline; gap: 8px; }
+  .gap-card .gap-pct .n { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 26px; color: var(--critical); }
+  .gap-card .gap-pct .of { font-size: 12px; color: var(--ink-muted); }
+  .gap-card .detail { font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
+  .gap-card .detail.size { margin-top: 3px; font-weight: 600; }
+
+  /* ---------- Champion pool ---------- */
+  .panel.clip { overflow: hidden; }
+  .pool-stats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+  .pool-stat { background: var(--surface); padding: 16px 22px; }
+  .pool-stat .label { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .pool-stat .value { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 28px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+  .pool-stat .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .mix { padding: 6px 22px 16px; }
+  .mix-row { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 14px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gridline); }
+  .mix-row:last-child { border-bottom: none; }
+  .mix-row.head { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .mix-class { font-size: 13.5px; color: var(--ink-2); }
+  .mix-bar { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .mix-bar .bar { height: 12px; border-radius: 3px; min-width: 2px; }
+  .mix-bar .bar.you { background: var(--accent); }
+  .mix-bar .bar.tier { background: var(--ink-muted); opacity: 0.55; }
 </style>
+</head>
+<body>
 
 <div class="masthead">
   <div class="masthead-inner">
@@ -401,29 +453,52 @@
     <label for="filter-tier">Compare vs.</label>
     <select id="filter-tier"></select>
   </div>
-  <div class="filter-field">
-    <label for="filter-k">Playstyles (k)</label>
-    <select id="filter-k"></select>
-  </div>
 </div>
 
 <div class="wrap">
 
+  <div class="panel glance" id="glance"></div>
+
+  <section id="section-style">
+    <div class="section-head">
+      <div class="eyebrow">Who you are</div>
+      <h2 id="style-heading">Your playstyle</h2>
+      <p id="style-sub">&nbsp;</p>
+    </div>
+    <div class="panel" id="style-panel"></div>
+  </section>
+
+  <section id="section-pool">
+    <div class="section-head">
+      <div class="eyebrow">Champion pool</div>
+      <h2 id="pool-heading">What you play</h2>
+      <p id="pool-sub">&nbsp;</p>
+    </div>
+    <div class="panel clip" id="pool-panel"></div>
+  </section>
+
   <section id="section-percentiles">
     <div class="section-head">
-      <div class="eyebrow">vs. reference tier</div>
+      <div class="eyebrow">Where to improve</div>
       <h2>How you compare</h2>
-      <p id="percentiles-sub">Your average against the reference tier, as a performance percentile.</p>
+      <p id="percentiles-sub">&nbsp;</p>
     </div>
     <div class="panel">
       <div class="legend-row">
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-pos)"></span>Above median</span>
-        <span class="legend-item"><span class="legend-swatch" style="background:var(--div-neg)"></span>Below median</span>
+        <span class="legend-item"><span class="legend-marker raw"></span>Raw</span>
+        <span class="legend-item"><span class="legend-marker adj"></span>On your champions, in an even game</span>
         <span class="legend-item"><span class="legend-swatch" style="background:var(--ink-muted);width:2px;height:12px;border-radius:0"></span>Median (50th)</span>
-        <span class="legend-item">Percentile = share of players you outperform; flipped for lower-is-better stats so a longer bar is always better.</span>
+        <span class="legend-item">Flipped for lower-is-better stats, so further right is always better.</span>
       </div>
+      <div class="notice" id="percentiles-notice" hidden></div>
       <div class="divbars" id="divbars"></div>
     </div>
+
+    <div class="section-head" style="margin-top:36px;">
+      <h3 style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:19px;">Biggest gaps</h3>
+      <p id="gaps-sub" style="color:var(--ink-2);margin-top:6px;font-size:13.5px;">&nbsp;</p>
+    </div>
+    <div class="gap-list" id="gaps"></div>
   </section>
 
   <section id="section-pro">
@@ -444,33 +519,11 @@
     <div class="card-grid" id="pro-match-grid"></div>
   </section>
 
-  <section id="section-archetypes">
-    <div class="section-head">
-      <div class="eyebrow">Playstyle clustering</div>
-      <h2 id="archetypes-heading">Your archetypes</h2>
-      <p id="archetypes-sub">KMeans clusters fit on the full training population for this role, on stats adjusted for game outcome (win/loss and team kill/gold lead) — so archetypes describe <em>how</em> games are played, not whether they were won. Each card shows the population win rate for that archetype, how much of your games land there vs. the population's own share (over/under-represented), and your win rate within it vs. the population's.</p>
-    </div>
-    <div class="card-grid" id="card-grid"></div>
-  </section>
-
-  <section id="section-scatter">
-    <div class="section-head">
-      <div class="eyebrow">Cluster space</div>
-      <h2>Where your games land</h2>
-      <p>A 2D projection (first two PCA components) of the role population, sampled, with your games in the current window plotted on top. Filled = win, ringed = loss.</p>
-    </div>
-    <div class="panel scatter-panel">
-      <div class="legend-row" id="scatter-legend" style="border-bottom:none;padding:4px 4px 10px;"></div>
-      <div class="scatter-captions" id="scatter-captions"></div>
-      <svg id="scatter" class="scatter-svg" viewBox="0 0 760 440" preserveAspectRatio="xMidYMid meet"></svg>
-    </div>
-  </section>
-
   <section id="section-games">
     <div class="section-head">
       <div class="eyebrow">Match log</div>
       <h2 id="games-heading">Ranked games</h2>
-      <p id="games-sub">Most recent first, across all roles in the current game window. Archetype is only assigned for the selected role.</p>
+      <p id="games-sub">Most recent first, across all roles in the current game window.</p>
     </div>
     <div class="panel table-wrap">
       <table class="games" id="games-table">
@@ -478,7 +531,6 @@
           <tr>
             <th>Result</th><th>Champion</th><th>Role</th>
             <th class="num">KDA</th><th class="num">CS/min</th><th class="num">DMG/min</th><th class="num">Vision/min</th>
-            <th>Archetype</th>
           </tr>
         </thead>
         <tbody id="games-tbody"></tbody>
@@ -486,16 +538,23 @@
     </div>
   </section>
 
+
   <footer>
-    Data via the Riot Games API, aggregated across Diamond, Master, Grandmaster, and Challenger solo queue. Clustering is
-    fit per role (StandardScaler &rarr; PCA &rarr; KMeans) on match aggregate stats; the cluster-count slider refits KMeans
-    on the same PCA space for k = 3&ndash;6. This is a static snapshot &mdash; re-export after fetching new games to refresh.
+    <p>Data via the Riot Games API: ranked solo queue games across Diamond, Master, Grandmaster and Challenger (NA and KR).
+    Playstyle traits use stats adjusted for the champion played, your teammates&rsquo; lead and game length, ranked as
+    percentiles among reference players with 10+ games. Methodology and code:
+    <a href="https://github.com/astinlin01/rift-archetypes">github.com/astinlin01/rift-archetypes</a>.
+    This is a static snapshot, regenerated from the pipeline.</p>
+    <p>Rift Archetypes isn&rsquo;t endorsed by Riot Games and doesn&rsquo;t reflect the views or opinions of Riot Games or anyone
+    officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are
+    trademarks or registered trademarks of Riot Games, Inc.</p>
   </footer>
 </div>
 
 <div id="tooltip"></div>
 
 <script id="dashboard-data" type="application/json">__DATA_PLACEHOLDER__</script>
+<script>/*__PROFILE_MATH__*/</script>
 <script>
 (function () {
   var DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
@@ -536,26 +595,11 @@
     return img;
   }
 
-  function percentileFromBreakpoints(value, breakpoints) {
-    var n = breakpoints.length;
-    if (value <= breakpoints[0]) return 0;
-    if (value >= breakpoints[n - 1]) return 100;
-    var step = 100 / (n - 1);
-    for (var i = 0; i < n - 1; i++) {
-      if (value <= breakpoints[i + 1]) {
-        var lo = breakpoints[i], hi = breakpoints[i + 1];
-        var frac = hi > lo ? (value - lo) / (hi - lo) : 0;
-        return (i + frac) * step;
-      }
-    }
-    return 100;
-  }
-
-  function mean(values) {
-    var filtered = values.filter(function (v) { return v !== null && v !== undefined && !isNaN(v); });
-    if (!filtered.length) return null;
-    return filtered.reduce(function (a, b) { return a + b; }, 0) / filtered.length;
-  }
+  // Shared math lives in dashboard/profile_math.js (inlined above by build_dashboard.py),
+  // tested against the Python pipeline in tests/test_dashboard_math.py.
+  var PM = window.ProfileMath;
+  var percentileFromBreakpoints = PM.percentileFromBreakpoints;
+  var mean = PM.mean;
 
   // ---------- Populate filter selects ----------
   var accountSelect = document.getElementById('filter-account');
@@ -564,7 +608,6 @@
   var championSelect = document.getElementById('filter-champion');
   var regionSelect = document.getElementById('filter-region');
   var tierSelect = document.getElementById('filter-tier');
-  var kSelect = document.getElementById('filter-k');
   var REGION_DISPLAY_NAMES = DATA.region_display_names || {};
   function regionLabel(region) { return REGION_DISPLAY_NAMES[region] || region; }
 
@@ -576,12 +619,6 @@
   });
   accountSelect.value = DATA.accounts[0];
 
-  DATA.k_options.forEach(function (k) {
-    var opt = document.createElement('option');
-    opt.value = k;
-    opt.textContent = k + ' clusters';
-    kSelect.appendChild(opt);
-  });
 
   function accountGames() {
     return DATA.games.filter(function (g) { return g.account === accountSelect.value; });
@@ -694,7 +731,7 @@
     refreshTierOptions();
     renderAll();
   });
-  [windowSelect, championSelect, tierSelect, kSelect].forEach(function (el) {
+  [windowSelect, championSelect, tierSelect].forEach(function (el) {
     el.addEventListener('change', renderAll);
   });
 
@@ -705,8 +742,7 @@
       role: roleSelect.value,
       champion: championSelect.value,
       region: regionSelect.value,
-      tier: tierSelect.value,
-      k: kSelect.value
+      tier: tierSelect.value
     };
   }
 
@@ -827,28 +863,418 @@
     });
   }
 
-  function renderPercentiles(filters, champGames) {
+  // ---------- Shared helpers for the profile sections ----------
+  var MIN_LABEL_MATCH = 45;  // playstyle_space.MIN_ARCHETYPE_MATCH, as a percent
+
+  function featureLabel(f) { return (DATA.feature_labels && DATA.feature_labels[f]) || f; }
+  function fmtStat(f, v) {
+    if (v === null || v === undefined || isNaN(v)) return '—';
+    if ((DATA.percent_features || []).indexOf(f) !== -1) return pct(v * 100);
+    // Small per-minute rates (control wards ~0.02/min) need a third decimal to be readable.
+    return fmt(v, Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 1 ? 2 : 3);
+  }
+  function scopeLabelOf(filters) {
+    return roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
+  }
+  function tierLabelOf(filters) { return titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region); }
+  function tierCurves(ref, filters) { return ref && ref[filters.region] && ref[filters.region][filters.tier]; }
+  function refCount(ref, filters) {
+    var counts = ref && ref._player_counts && ref._player_counts[filters.region];
+    return counts && counts[filters.tier] !== undefined ? counts[filters.tier] : 0;
+  }
+  function emptyState(html) { return '<div class="empty-state">' + html + '</div>'; }
+  function attachTooltip(el, html) {
+    el.addEventListener('pointerenter', function (e) { showTooltip(e, html); });
+    el.addEventListener('pointermove', moveTooltip);
+    el.addEventListener('pointerleave', hideTooltip);
+    el.addEventListener('focus', function () {
+      var r = el.getBoundingClientRect();
+      showTooltip({ clientX: r.left + r.width / 2, clientY: r.top }, html);
+    });
+    el.addEventListener('blur', hideTooltip);
+  }
+  function lowSampleNotice(n) {
+    return 'Low confidence: ' + n + ' games in this selection. Results settle down from ' + DATA.full_own_games + ' games on.';
+  }
+  // A section can't render: say why, with the numbers (never a blank panel).
+  function stateMessage(state, filters, what) {
+    if (state.state === 'all-roles') return 'Select a specific role to see your ' + what + '. Everything here is fitted separately per role.';
+    if (state.state === 'few-games') return 'Insufficient data (n=' + state.n + ' games). Needs at least ' + DATA.min_own_games + ' ' + scopeLabelOf(filters) + ' games in this window.';
+    if (state.state === 'no-ref') return 'Insufficient reference data (n=' + state.refN + ' ' + tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' players with 10+ games; 20 needed).';
+    return '';
+  }
+
+  // ---------- Style profile ----------
+  function computeStyle(filters, games) {
+    if (filters.role === ALL_ROLES) return { state: 'all-roles' };
+    var role = DATA.roles[filters.role];
+    var n = games.length;
+    if (PM.ownSampleStatus(n) === 'insufficient') return { state: 'few-games', n: n };
+    var curves = tierCurves(role.style_reference, filters);
+    if (!curves) return { state: 'no-ref', refN: refCount(role.style_reference, filters) };
+
+    var tp = PM.traitProfile(games.map(function (g) { return g.traits || {}; }), role.traits);
+    var rows = [], missing = [];
+    role.traits.forEach(function (trait) {
+      var value = tp.profile[trait], curve = curves[trait];
+      if (value === null || !curve) { missing.push(trait); return; }
+      var reliability = PM.profileReliability(role.trait_reliability[trait], tp.counts[trait]);
+      rows.push({
+        trait: trait, games: tp.counts[trait], reliability: reliability,
+        confidence: PM.confidenceLabel(reliability),
+        percentile: percentileFromBreakpoints(value, curve.breakpoints)
+      });
+    });
+    rows.sort(function (a, b) { return b.percentile - a.percentile; });
+    return {
+      state: 'ok', n: n, sample: PM.ownSampleStatus(n), rows: rows, missing: missing,
+      labels: PM.softLabels(tp.profile, role.archetypes, 2)
+    };
+  }
+
+  var CONFIDENCE_DOTS = { high: '●●●', medium: '●●○', low: '●○○' };
+
+  function renderStyle(filters, games) {
+    var panel = document.getElementById('style-panel');
+    document.getElementById('style-heading').textContent = 'Your ' + scopeLabelOf(filters) + ' playstyle';
+    document.getElementById('style-sub').textContent =
+      'Each bar is a trait: your average over the selected games, as a percentile among ' + tierLabelOf(filters) + ' ' +
+      roleLabel(filters.role) + ' players (10+ games each). Stats are adjusted for the champion played and your teammates’ ' +
+      'lead first, so this describes how you play, not what you pick or whether your team won. Confidence says how settled ' +
+      'each trait is at your number of games.';
+
+    var style = computeStyle(filters, games);
+    if (style.state !== 'ok') { panel.innerHTML = emptyState(stateMessage(style, filters, 'playstyle')); return; }
+
+    panel.innerHTML = '';
+    var labelsRow = document.createElement('div');
+    labelsRow.className = 'labels-row';
+    var fits = style.labels.filter(function (l) { return l[1] >= MIN_LABEL_MATCH; });
+    if (fits.length) {
+      labelsRow.innerHTML = fits.map(function (l, i) {
+        return '<span class="label-chip' + (i ? ' secondary' : '') + '"><span class="pctv">' + Math.round(l[1]) + '%</span>' + l[0] + '</span>';
+      }).join('') + '<span class="hint">closest archetypes (match %)</span>';
+    } else {
+      labelsRow.innerHTML = '<span class="hint">No archetype fits well (best: ' +
+        (style.labels[0] ? style.labels[0][0] + ', ' + Math.round(style.labels[0][1]) + '%' : '—') +
+        '). Your profile mixes traits more than any single archetype does.</span>';
+    }
+    panel.appendChild(labelsRow);
+
+    if (style.sample === 'low') {
+      var notice = document.createElement('div');
+      notice.className = 'notice';
+      notice.textContent = lowSampleNotice(style.n);
+      panel.appendChild(notice);
+    }
+
+    var bars = document.createElement('div');
+    bars.className = 'divbars';
+    style.rows.forEach(function (r) {
+      var row = document.createElement('div');
+      row.className = 'divbar-row style-row';
+      var label = document.createElement('div');
+      label.className = 'divbar-label';
+      label.textContent = r.trait;
+
+      var track = document.createElement('div');
+      track.className = 'divbar-track';
+      var axis = document.createElement('div');
+      axis.className = 'divbar-axis';
+      var fill = document.createElement('div');
+      var above = r.percentile >= 50;
+      fill.className = 'divbar-fill ' + (above ? 'pos' : 'neg');
+      fill.style.width = Math.max(Math.abs(r.percentile - 50), 0.8) + '%';
+      fill.tabIndex = 0;
+      attachTooltip(fill,
+        '<div class="tt-title">' + r.trait + '</div>' +
+        '<div class="tt-row"><span>Percentile</span><strong>' + ordinal(r.percentile) + '</strong></div>' +
+        '<div class="tt-row"><span>Games</span><strong>' + r.games + '</strong></div>' +
+        '<div class="tt-row"><span>Reliability</span><strong>' + r.reliability.toFixed(2) + ' (' + r.confidence + ')</strong></div>');
+      track.appendChild(axis);
+      track.appendChild(fill);
+
+      var value = document.createElement('div');
+      value.className = 'divbar-value mono tabular';
+      value.textContent = ordinal(r.percentile);
+
+      var conf = document.createElement('div');
+      conf.className = 'conf';
+      conf.innerHTML = '<span class="dots">' + CONFIDENCE_DOTS[r.confidence] + '</span>' + r.confidence;
+
+      row.appendChild(label); row.appendChild(track); row.appendChild(value); row.appendChild(conf);
+      bars.appendChild(row);
+    });
+    panel.appendChild(bars);
+
+    if (style.missing.length) {
+      var missing = document.createElement('div');
+      missing.className = 'muted-list';
+      missing.textContent = 'No data yet for: ' + style.missing.join(', ') +
+        (style.missing.indexOf('Early Trading') !== -1 ? ' (needs early-game timeline data).' : '.');
+      panel.appendChild(missing);
+    }
+  }
+
+  // ---------- Champion pool (window applies; the champion filter doesn't) ----------
+  function computePool(filters, games) {
+    if (filters.role === ALL_ROLES) return { state: 'all-roles' };
+    var n = games.length;
+    if (PM.ownSampleStatus(n) === 'insufficient') return { state: 'few-games', n: n };
+    var regionRef = DATA.roles[filters.role].pool_reference[filters.region];
+    var ref = regionRef && regionRef[filters.tier];
+    if (!ref || !ref.class_mix) return { state: 'no-ref', refN: ref ? ref.n : 0 };
+
+    var counts = {};
+    games.forEach(function (g) { counts[g.champion] = (counts[g.champion] || 0) + 1; });
+    var effective = PM.effectiveChampions(counts);
+    return {
+      state: 'ok', n: n, sample: PM.ownSampleStatus(n), ref: ref,
+      effective: effective,
+      // Share of reference players with a *larger* pool than yours.
+      tighterThan: effective === null ? null : 100 - percentileFromBreakpoints(effective, ref.effective_champions.breakpoints),
+      top: PM.topChampion(counts),
+      mix: PM.classMix(games.map(function (g) { return g.championClass; }))
+    };
+  }
+
+  function renderPool(filters, games) {
+    var panel = document.getElementById('pool-panel');
+    document.getElementById('pool-heading').textContent = 'What you play as ' + roleLabel(filters.role);
+    document.getElementById('pool-sub').textContent =
+      'Your champion picks in the current window (the champion filter doesn’t apply here), next to the average ' +
+      tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' player’s. Effective champions counts how many champions you ' +
+      'really play: 10 games split 5/5 is 2, mostly one champion is close to 1. Classes are Riot’s champion tags; ' +
+      'supports use subclasses (Enchanter, Pick, Tank, Mage).';
+
+    var pool = computePool(filters, games);
+    if (pool.state !== 'ok') { panel.innerHTML = emptyState(stateMessage(pool, filters, 'champion pool')); return; }
+
+    var tierName = tierLabelOf(filters);
+    var topIcon = championIconImg(pool.top[0], 'sm');
+    var html =
+      (pool.sample === 'low' ? '<div class="notice">' + lowSampleNotice(pool.n) + '</div>' : '') +
+      '<div class="pool-stats">' +
+        '<div class="pool-stat"><div class="label">Effective champions</div>' +
+          '<div class="value mono">' + fmt(pool.effective, 1) + '</div>' +
+          '<div class="foot">' + (pool.tighterThan === null ? '' : 'Tighter pool than ' + Math.round(pool.tighterThan) + '% of ' + tierName + ' players · ') +
+          'their median ' + fmt(pool.ref.effective_champions.median, 1) + '</div></div>' +
+        '<div class="pool-stat"><div class="label">Most played</div>' +
+          '<div class="value">' + (topIcon ? topIcon.outerHTML : '') + pool.top[0] + '</div>' +
+          '<div class="foot">' + pct(pool.top[1] * 100) + ' of your ' + pool.n + ' games</div></div>' +
+      '</div>';
+
+    var classes = Object.keys(pool.mix).concat(Object.keys(pool.ref.class_mix)).filter(function (c, i, all) { return all.indexOf(c) === i; });
+    classes.sort(function (a, b) {
+      return Math.max(pool.mix[b] || 0, pool.ref.class_mix[b] || 0) - Math.max(pool.mix[a] || 0, pool.ref.class_mix[a] || 0);
+    });
+    html += '<div class="mix"><div class="mix-row head"><span>Class</span><span>You</span><span>' + tierName + ' avg (n=' + pool.ref.n + ')</span></div>';
+    classes.forEach(function (c) {
+      var you = pool.mix[c] || 0, tier = pool.ref.class_mix[c] || 0;
+      html += '<div class="mix-row"><span class="mix-class">' + c + '</span>' +
+        '<span class="mix-bar"><span class="bar you" style="width:' + (you * 100) + '%"></span>' + pct(you * 100) + '</span>' +
+        '<span class="mix-bar"><span class="bar tier" style="width:' + (tier * 100) + '%"></span>' + pct(tier * 100) + '</span></div>';
+    });
+    panel.innerHTML = html + '</div>';
+  }
+
+  // ---------- How you compare: raw (○) vs on your champions, in an even game (◆) ----------
+  function renderPercentiles(filters, games) {
     var container = document.getElementById('divbars');
-    var regionRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region];
-    var refForRoleTier = regionRef && regionRef[filters.tier];
-    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
-    var tierLabel = titleCase(filters.tier || '—') + ' ' + regionLabel(filters.region);
+    var notice = document.getElementById('percentiles-notice');
+    var rawRef = DATA.reference[filters.role] && DATA.reference[filters.role][filters.region] &&
+      DATA.reference[filters.role][filters.region][filters.tier];
+    var adjRef = filters.role !== ALL_ROLES ? tierCurves(DATA.roles[filters.role].adjusted_reference, filters) : null;
+    var tierName = tierLabelOf(filters);
 
     document.getElementById('percentiles-sub').textContent =
-      'Your ' + scopeLabel + ' average in the current window against the season ' + DATA.season + ' averages of ' +
-      (refForRoleTier ? Object.values(refForRoleTier)[0].n.toLocaleString() + ' ' : '') + tierLabel +
-      ' ' + roleLabel(filters.role) + ' players (10+ games each).';
+      'Your ' + scopeLabelOf(filters) + ' average in the current window, as a percentile among ' +
+      (rawRef ? Object.values(rawRef)[0].n.toLocaleString() + ' ' : '') + tierName + ' ' + roleLabel(filters.role) +
+      ' players (10+ games each). ○ Raw is your stats as they are. ◆ On your champions, in an even game compares each game with ' +
+      'what’s typical on that champion with your teammates’ lead and game length taken out (your own lane lead stays in), ' +
+      'so the distance between the two is how much your picks and your teammates move the number.' +
+      (filters.role === ALL_ROLES ? ' Select a role to see the ◆ view (it’s fitted per role).' : '');
 
-    if (!champGames.length) {
-      container.innerHTML = '<div class="empty-state">No ' + scopeLabel + ' games in this window.</div>';
+    notice.hidden = true;
+    var n = games.length;
+    if (PM.ownSampleStatus(n) === 'insufficient') {
+      container.innerHTML = emptyState(stateMessage({ state: 'few-games', n: n }, filters));
       return;
     }
-    if (!refForRoleTier) {
-      container.innerHTML = '<div class="empty-state">Not enough ' + tierLabel + ' ' + roleLabel(filters.role) + ' data to compare against yet.</div>';
+    if (!rawRef) {
+      container.innerHTML = emptyState('Not enough ' + tierName + ' ' + roleLabel(filters.role) + ' data to compare against yet.');
       return;
     }
+    if (PM.ownSampleStatus(n) === 'low') { notice.hidden = false; notice.textContent = lowSampleNotice(n); }
 
-    renderDivBars(container, DATA.headline_features, refForRoleTier, champGames, tierLabel);
+    container.innerHTML = '';
+    DATA.headline_features.forEach(function (f) {
+      var curve = rawRef[f.feature];
+      if (!curve) return;
+      var yourRaw = mean(games.map(function (g) { return g.features[f.feature]; }));
+      if (yourRaw === null) return;
+      function display(p) { return Math.max(0, Math.min(100, f.invert ? 100 - p : p)); }
+      var rawPct = display(percentileFromBreakpoints(yourRaw, curve.breakpoints));
+
+      var adjPct = null, yourAdj = null;
+      var adjCurve = adjRef && adjRef[f.feature];
+      if (adjCurve) {
+        yourAdj = mean(games.map(function (g) { return g.adjusted ? g.adjusted[f.feature] : null; }));
+        if (yourAdj !== null) adjPct = display(percentileFromBreakpoints(yourAdj, adjCurve.breakpoints));
+      }
+
+      var row = document.createElement('div');
+      row.className = 'divbar-row marker-row';
+      var label = document.createElement('div');
+      label.className = 'divbar-label';
+      label.textContent = f.label + (f.invert ? ' (lower = better)' : '');
+
+      var track = document.createElement('div');
+      track.className = 'marker-track';
+      var median = document.createElement('div');
+      median.className = 'pctbar-median';
+      track.appendChild(median);
+      if (adjPct !== null) {
+        var link = document.createElement('div');
+        link.className = 'marker-link';
+        link.style.left = Math.min(rawPct, adjPct) + '%';
+        link.style.width = Math.abs(rawPct - adjPct) + '%';
+        track.appendChild(link);
+      }
+      var raw = document.createElement('div');
+      raw.className = 'marker raw';
+      raw.style.left = rawPct + '%';
+      raw.tabIndex = 0;
+      attachTooltip(raw,
+        '<div class="tt-title">' + f.label + ' · raw</div>' +
+        '<div class="tt-row"><span>You</span><strong>' + fmtStat(f.feature, yourRaw) + '</strong></div>' +
+        '<div class="tt-row"><span>' + tierName + ' avg</span><strong>' + fmtStat(f.feature, curve.ref_avg) + '</strong></div>' +
+        '<div class="tt-row"><span>Percentile</span><strong>' + ordinal(rawPct) + '</strong></div>');
+      track.appendChild(raw);
+      if (adjPct !== null) {
+        var adj = document.createElement('div');
+        adj.className = 'marker adj';
+        adj.style.left = adjPct + '%';
+        adj.tabIndex = 0;
+        attachTooltip(adj,
+          '<div class="tt-title">' + f.label + ' · on your champions, even game</div>' +
+          '<div class="tt-row"><span>You (adjusted)</span><strong>' + fmtStat(f.feature, yourAdj) + '</strong></div>' +
+          '<div class="tt-row"><span>' + tierName + ' avg</span><strong>' + fmtStat(f.feature, adjCurve.ref_avg) + '</strong></div>' +
+          '<div class="tt-row"><span>Percentile</span><strong>' + ordinal(adjPct) + '</strong></div>');
+        track.appendChild(adj);
+      }
+
+      var value = document.createElement('div');
+      value.className = 'divbar-value mono tabular';
+      value.textContent = Math.round(rawPct) + (adjPct !== null ? ' → ' + Math.round(adjPct) : '');
+
+      row.appendChild(label); row.appendChild(track); row.appendChild(value);
+      container.appendChild(row);
+    });
+  }
+
+  // ---------- Biggest gaps (on your champions, in an even game) ----------
+  function computeGaps(filters, games) {
+    if (filters.role === ALL_ROLES) return { state: 'all-roles' };
+    var n = games.length;
+    if (PM.ownSampleStatus(n) === 'insufficient') return { state: 'few-games', n: n };
+    var role = DATA.roles[filters.role];
+    var curves = tierCurves(role.adjusted_reference, filters);
+    if (!curves) return { state: 'no-ref', refN: refCount(role.adjusted_reference, filters) };
+    var adjusted = games.map(function (g) { return g.adjusted || {}; });
+    return { state: 'ok', n: n, gaps: PM.biggestGaps(adjusted, curves, role.gap_features, 3), gapFeatures: role.gap_features };
+  }
+
+  // "≈330 gold per 31-min game behind": the gap at its real size, since a tightly packed
+  // tier can turn a small difference into a low percentile.
+  function gapSizeText(gap, role) {
+    var size = PM.gapSize(gap.feature, gap.your_avg, gap.reference_median, role.median_game_minutes, DATA.percent_features);
+    var unit = (DATA.gap_units || {})[gap.feature] || featureLabel(gap.feature);
+    var a = size.amount;
+    var shown = a >= 100 ? (Math.round(a / 10) * 10).toLocaleString() : a >= 10 ? Math.round(a) : a.toFixed(1);
+    if (size.per_game) return 'Size: ≈' + shown + ' ' + unit + ' per ' + Math.round(role.median_game_minutes) + '-min game';
+    if ((DATA.percent_features || []).indexOf(gap.feature) !== -1) return 'Size: ' + shown + ' percentage points';
+    return 'Size: ' + shown + ' ' + unit;
+  }
+
+  function renderGaps(filters, games) {
+    var list = document.getElementById('gaps');
+    var tierName = tierLabelOf(filters);
+    document.getElementById('gaps-sub').textContent =
+      'Your weakest stats on your champions, in an even game, against ' + tierName + ' ' + roleLabel(filters.role) + ' players: at most one per ' +
+      'theme, only stats where better is clear, and only gaps bigger than the game-to-game noise in your ' +
+      games.length + ' games.';
+    var result = computeGaps(filters, games);
+    if (result.state !== 'ok') { list.innerHTML = emptyState(stateMessage(result, filters, 'gaps')); return; }
+    if (!result.gaps.length) {
+      list.innerHTML = emptyState('No clear gaps: on your champions, in an even game, you’re at or above the ' + tierName +
+        ' median on every tracked stat, or the difference is within noise for ' + result.n + ' games.');
+      return;
+    }
+    list.innerHTML = '';
+    var role = DATA.roles[filters.role];
+    result.gaps.forEach(function (gap) {
+      var lowerBetter = result.gapFeatures[gap.feature][1] < 0;
+      var card = document.createElement('div');
+      card.className = 'panel gap-card';
+      card.innerHTML =
+        '<div class="theme">' + gap.theme + '</div>' +
+        '<h3>' + featureLabel(gap.feature) + (lowerBetter ? ' <span style="font-weight:500;font-size:13px;color:var(--ink-muted)">(lower = better)</span>' : '') + '</h3>' +
+        '<div class="gap-pct"><span class="n mono">' + ordinal(gap.percentile) + '</span><span class="of">percentile on your champions, even game</span></div>' +
+        '<div class="detail">You: ' + fmtStat(gap.feature, gap.your_avg) + ' · ' + tierName + ' median: ' +
+        fmtStat(gap.feature, gap.reference_median) + ' · ' + gap.n_games + ' games</div>' +
+        '<div class="detail size">' + gapSizeText(gap, role) + '</div>';
+      list.appendChild(card);
+    });
+  }
+
+  // ---------- At a glance ----------
+  function renderGlance(filters, champGames, roleGames) {
+    var glance = document.getElementById('glance');
+    var style = computeStyle(filters, champGames);
+    var pool = computePool(filters, roleGames);
+    var gaps = computeGaps(filters, champGames);
+
+    function cell(label, main, line) {
+      return '<div><div class="g-label">' + label + '</div><div class="g-main">' + main + '</div>' +
+        (line ? '<div class="g-line">' + line + '</div>' : '') + '</div>';
+    }
+    function shortState(state) {
+      if (state.state === 'all-roles') return 'Pick a role';
+      if (state.state === 'few-games') return 'Insufficient data (n=' + state.n + ')';
+      if (state.state === 'no-ref') return 'Insufficient reference (n=' + state.refN + ')';
+      return '';
+    }
+
+    var styleCell;
+    if (style.state === 'ok') {
+      var fits = style.labels.filter(function (l) { return l[1] >= MIN_LABEL_MATCH; });
+      var strongest = style.rows.slice(0, 2).map(function (r) { return r.trait + ' ' + ordinal(r.percentile); }).join(' · ');
+      styleCell = cell('Playstyle', fits.length ? Math.round(fits[0][1]) + '% ' + fits[0][0] : 'Mixed profile',
+        (fits[1] ? Math.round(fits[1][1]) + '% ' + fits[1][0] + ' · ' : '') + 'Strongest: ' + strongest);
+    } else {
+      styleCell = cell('Playstyle', shortState(style), '');
+    }
+
+    var poolCell;
+    if (pool.state === 'ok') {
+      var icon = championIconImg(pool.top[0], 'sm');
+      poolCell = cell('Champion pool', fmt(pool.effective, 1) + ' effective champions',
+        (icon ? icon.outerHTML : '') + pool.top[0] + ' ' + pct(pool.top[1] * 100) + ' of games');
+    } else {
+      poolCell = cell('Champion pool', shortState(pool), '');
+    }
+
+    var gapsCell;
+    if (gaps.state === 'ok') {
+      gapsCell = gaps.gaps.length
+        ? cell('Biggest gaps', gaps.gaps.slice(0, 2).map(function (g) { return featureLabel(g.feature); }).join(' · '),
+            gaps.gaps.map(function (g) { return featureLabel(g.feature) + ' ' + ordinal(g.percentile); }).join(' · ') + ' vs ' + tierLabelOf(filters))
+        : cell('Biggest gaps', 'No clear gaps', 'vs ' + tierLabelOf(filters));
+    } else {
+      gapsCell = cell('Biggest gaps', shortState(gaps), '');
+    }
+    glance.innerHTML = styleCell + poolCell + gapsCell;
   }
 
   // ---------- vs. Pro ----------
@@ -990,210 +1416,12 @@
     });
   }
 
-  // ---------- Archetype cards ----------
-  // Clusters are fit on outcome-adjusted stats, so win rate no longer orders them --
-  // order by population size (largest first) for stable colors across k.
-  function orderedClusters(summary) {
-    return summary.slice().sort(function (a, b) { return b.n - a.n || a.cluster - b.cluster; });
-  }
-
-  function describeCluster(c) {
-    var parts = [];
-    if (c.traits && c.traits.length) parts.push('Leans ' + c.traits.join(', ').toLowerCase() + '.');
-    if (c.low_traits && c.low_traits.length) parts.push('Less ' + c.low_traits.join(', ').toLowerCase() + '.');
-    if (c.top_champions && c.top_champions.length) parts.push('Common picks: ' + c.top_champions.join(', ') + '.');
-    return parts.join(' ');
-  }
-
-  function renderArchetypes(filters, champGames) {
-    var grid = document.getElementById('card-grid');
-    grid.innerHTML = '';
-    var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' (' + filters.champion + ')' : '');
-    document.getElementById('archetypes-heading').textContent = scopeLabel + ' archetypes';
-
-    if (filters.role === ALL_ROLES) {
-      grid.innerHTML = '<div class="empty-state">Select a specific role to see playstyle archetypes — clustering is fit separately per role, since role is the dominant driver of raw stats.</div>';
-      return;
-    }
-
-    var roleData = DATA.roles[filters.role];
-    var kData = roleData && roleData.clusters_by_k[filters.k];
-    if (!kData) {
-      grid.innerHTML = '<div class="empty-state">No cluster data for this role/k combination.</div>';
-      return;
-    }
-
-    var yourGamesByCluster = {};
-    champGames.forEach(function (g) {
-      var c = g.clusterByK[filters.k];
-      if (c === undefined) return;
-      if (!yourGamesByCluster[c]) yourGamesByCluster[c] = [];
-      yourGamesByCluster[c].push(g);
-    });
-
-    var sorted = orderedClusters(kData.summary);
-    var totalPopGames = kData.summary.reduce(function (sum, c) { return sum + c.n; }, 0);
-
-    sorted.forEach(function (c, rank) {
-      var color = SLOTS[rank % SLOTS.length];
-      var yourGames = yourGamesByCluster[c.cluster] || [];
-      var yourCount = yourGames.length;
-      var yourShareFrac = champGames.length ? yourCount / champGames.length : 0;
-      var yourShare = Math.round(yourShareFrac * 100);
-      var yourWinRate = winRateOf(yourGames);
-      var popShareFrac = totalPopGames ? c.n / totalPopGames : 0;
-
-      var winCompareHtml = '';
-      if (yourCount > 0) {
-        var vsClass = yourWinRate >= c.win_rate ? 'above' : 'below';
-        var vsSign = yourWinRate >= c.win_rate ? '+' : '−';
-        var vsDelta = Math.round(Math.abs(yourWinRate - c.win_rate) * 100);
-        winCompareHtml =
-          '<div class="arch-compare">' +
-          '<div><div class="label">Your win rate here</div><div class="your-wr ' + vsClass + '">' + pct(yourWinRate * 100) + '</div></div>' +
-          '<div style="text-align:right"><div class="label">vs. population</div><div class="your-wr ' + vsClass + '">' + vsSign + vsDelta + '</div></div>' +
-          '</div>';
-      }
-
-      var shareDeltaPp = Math.round(Math.abs(yourShareFrac - popShareFrac) * 100);
-      var shareClass = yourShareFrac >= popShareFrac ? 'over' : 'under';
-      var shareSign = yourShareFrac >= popShareFrac ? '+' : '−';
-      var shareCompareHtml =
-        '<div class="arch-compare">' +
-        '<div><div class="label">Your share of games</div><div class="your-wr ' + shareClass + '">' + pct(yourShareFrac * 100) + '</div></div>' +
-        '<div style="text-align:right"><div class="label">vs. population (' + pct(popShareFrac * 100) + ')</div><div class="your-wr ' + shareClass + '">' + shareSign + shareDeltaPp + 'pp</div></div>' +
-        '</div>';
-
-      var card = document.createElement('div');
-      card.className = 'panel arch-card';
-      card.innerHTML =
-        '<h3><span class="dot" style="background:' + color + '"></span>' + c.name + '</h3>' +
-        '<div class="desc" style="font-size:13px;color:var(--ink-2);margin-top:8px;">' + describeCluster(c) + '</div>' +
-        '<div class="meter-label"><span>Population win rate</span><span class="mono tabular">' + pct(c.win_rate * 100) + '</span></div>' +
-        '<div class="meter-track"><div class="meter-fill" style="width:' + pct(c.win_rate * 100) + ';background:' + color + '"></div></div>' +
-        '<div class="arch-stat"><span class="n mono">' + yourCount + '</span><span class="of">of your ' + champGames.length + ' games (' + yourShare + '%) · n=' + c.n.toLocaleString() + ' in training set</span></div>' +
-        shareCompareHtml +
-        winCompareHtml;
-      grid.appendChild(card);
-    });
-  }
-
-  // ---------- Scatter ----------
-  var svgNS = 'http://www.w3.org/2000/svg';
-  var svg = document.getElementById('scatter');
-  var W = 760, H = 440, PAD = 24;
-
-  function rankColorMap(summary) {
-    var sorted = orderedClusters(summary);
-    var map = {};
-    sorted.forEach(function (c, rank) { map[c.cluster] = { color: SLOTS[rank % SLOTS.length], name: c.name }; });
-    return map;
-  }
-
-  function renderScatter(filters, champGames) {
-    svg.innerHTML = '';
-    var roleData = DATA.roles[filters.role];
-    var kData = roleData && roleData.clusters_by_k[filters.k];
-
-    var legend = document.getElementById('scatter-legend');
-    if (kData) {
-      var legendSorted = orderedClusters(kData.summary);
-      legend.innerHTML = legendSorted.map(function (c, rank) {
-        return '<span class="legend-item"><span class="legend-swatch" style="background:' + SLOTS[rank % SLOTS.length] + '"></span>' + c.name + '</span>';
-      }).join('');
-    } else {
-      legend.innerHTML = '';
-    }
-
-    var captions = document.getElementById('scatter-captions');
-    if (filters.role === ALL_ROLES) {
-      captions.innerHTML = '<div class="scatter-axis-caption">Select a specific role to see the cluster space — PCA and clustering are fit separately per role.</div>';
-    } else if (roleData && roleData.pca_axis_labels) {
-      captions.innerHTML =
-        '<div class="scatter-axis-caption">→ Horizontal axis mostly separates by: <strong>' + roleData.pca_axis_labels.x + '</strong></div>' +
-        '<div class="scatter-axis-caption">↑ Vertical axis mostly separates by: <strong>' + roleData.pca_axis_labels.y + '</strong></div>';
-    } else {
-      captions.innerHTML = '';
-    }
-
-    if (!roleData || !kData) return;
-
-    var popX = roleData.population_scatter.x, popY = roleData.population_scatter.y;
-    var popLabels = kData.sample_labels;
-    var colorMap = rankColorMap(kData.summary);
-
-    var mineXY = champGames.filter(function (g) { return g.scatterXY; });
-
-    var allX = popX.concat(mineXY.map(function (g) { return g.scatterXY[0]; }));
-    var allY = popY.concat(mineXY.map(function (g) { return g.scatterXY[1]; }));
-    if (!allX.length) return;
-    var xMin = Math.min.apply(null, allX), xMax = Math.max.apply(null, allX);
-    var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
-    function sx(x) { return PAD + (x - xMin) / (xMax - xMin) * (W - 2 * PAD); }
-    function sy(y) { return H - PAD - (y - yMin) / (yMax - yMin) * (H - 2 * PAD); }
-
-    for (var i = 0; i < popX.length; i++) {
-      var popInfo = colorMap[popLabels[i]];
-      var c = document.createElementNS(svgNS, 'circle');
-      c.setAttribute('cx', sx(popX[i])); c.setAttribute('cy', sy(popY[i])); c.setAttribute('r', 2.6);
-      if (popInfo) {
-        c.setAttribute('fill', popInfo.color);
-        c.setAttribute('opacity', 0.3);
-      } else {
-        c.setAttribute('class', 'scatter-pop');
-      }
-      svg.appendChild(c);
-    }
-
-    mineXY.forEach(function (g) {
-      var clusterId = g.clusterByK[filters.k];
-      var info = colorMap[clusterId] || { color: 'var(--ink)', name: '—' };
-      var gEl = document.createElementNS(svgNS, 'g');
-      gEl.setAttribute('class', 'scatter-mine');
-
-      var mark = document.createElementNS(svgNS, 'circle');
-      mark.setAttribute('cx', sx(g.scatterXY[0])); mark.setAttribute('cy', sy(g.scatterXY[1])); mark.setAttribute('r', 6);
-      mark.setAttribute('fill', g.win ? info.color : 'var(--surface)');
-      mark.setAttribute('stroke', info.color);
-      mark.setAttribute('stroke-width', 2.2);
-
-      var hit = document.createElementNS(svgNS, 'circle');
-      hit.setAttribute('cx', sx(g.scatterXY[0])); hit.setAttribute('cy', sy(g.scatterXY[1])); hit.setAttribute('r', 13);
-      hit.setAttribute('class', 'hit');
-
-      gEl.appendChild(mark);
-      gEl.appendChild(hit);
-
-      gEl.addEventListener('pointerenter', function (e) {
-        var icon = championIconImg(g.champion, 'sm');
-        showTooltip(e,
-          '<div class="tt-title" style="display:flex;align-items:center;gap:6px;">' + (icon ? icon.outerHTML : '') + g.champion + '</div>' +
-          '<div class="tt-row"><span>Result</span><strong>' + (g.win ? 'Win' : 'Loss') + '</strong></div>' +
-          '<div class="tt-row"><span>Archetype</span><strong>' + info.name + '</strong></div>'
-        );
-      });
-      gEl.addEventListener('pointermove', moveTooltip);
-      gEl.addEventListener('pointerleave', hideTooltip);
-      svg.appendChild(gEl);
-    });
-  }
-
   // ---------- Games table ----------
   function renderTable(filters, windowGames) {
-    document.getElementById('games-sub').textContent = filters.role === ALL_ROLES
-      ? 'Most recent first, across all roles in the current game window. Select a specific role above to see archetype assignments.'
-      : 'Most recent first, across all roles in the current game window. Archetype shown for ' + roleLabel(filters.role) + ' games (k=' + filters.k + ').';
-
     var tbody = document.getElementById('games-tbody');
     tbody.innerHTML = '';
-
-    var roleData = DATA.roles[filters.role];
-    var kData = roleData && roleData.clusters_by_k[filters.k];
-    var colorMap = kData ? rankColorMap(kData.summary) : {};
-
     windowGames.forEach(function (g) {
       var tr = document.createElement('tr');
-
       var tdResult = document.createElement('td');
       var pill = document.createElement('span');
       pill.className = 'pill ' + (g.win ? 'win' : 'loss');
@@ -1215,31 +1443,7 @@
       var tdCs = document.createElement('td'); tdCs.className = 'num'; tdCs.textContent = fmt(g.features.cs_total_per_min, 1);
       var tdDmg = document.createElement('td'); tdDmg.className = 'num'; tdDmg.textContent = fmt(g.features.damage_per_minute, 0);
       var tdVis = document.createElement('td'); tdVis.className = 'num'; tdVis.textContent = fmt(g.features.vision_score_per_minute, 2);
-
-      var tdArch = document.createElement('td');
-      var clusterId = g.role === filters.role ? g.clusterByK[filters.k] : undefined;
-      if (clusterId !== undefined && colorMap[clusterId]) {
-        var chip = document.createElement('span');
-        chip.className = 'arch-chip';
-        var dot = document.createElement('span');
-        dot.className = 'dot';
-        dot.style.background = colorMap[clusterId].color;
-        chip.appendChild(dot);
-        chip.appendChild(document.createTextNode(colorMap[clusterId].name));
-        tdArch.appendChild(chip);
-      } else {
-        tdArch.textContent = '—';
-        tdArch.style.color = 'var(--ink-muted)';
-      }
-
-      tr.appendChild(tdResult);
-      tr.appendChild(tdChamp);
-      tr.appendChild(tdRole);
-      tr.appendChild(tdKda);
-      tr.appendChild(tdCs);
-      tr.appendChild(tdDmg);
-      tr.appendChild(tdVis);
-      tr.appendChild(tdArch);
+      [tdResult, tdChamp, tdRole, tdKda, tdCs, tdDmg, tdVis].forEach(function (td) { tr.appendChild(td); });
       tbody.appendChild(tr);
     });
   }
@@ -1251,13 +1455,17 @@
     var champGames = filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
 
     renderHeader(filters, windowGames, champGames);
+    renderGlance(filters, champGames, roleGames);
+    renderStyle(filters, champGames);
+    renderPool(filters, roleGames);
     renderPercentiles(filters, champGames);
+    renderGaps(filters, champGames);
     renderProSection(filters, champGames);
-    renderArchetypes(filters, champGames);
-    renderScatter(filters, champGames);
     renderTable(filters, windowGames);
   }
 
   renderAll();
 })();
 </script>
+</body>
+</html>

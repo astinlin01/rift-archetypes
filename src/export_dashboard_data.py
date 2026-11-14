@@ -1,19 +1,20 @@
 """
-Export a static JSON payload for the interactive self-analysis dashboard
-(published as a Claude Artifact, not part of this repo). Pulls from the
-already-built feature table and per-role fitted scaler/PCA -- run
-build_features.py and build_clusters.py first.
+Export the JSON payload for the static self-analysis dashboard (dashboard/template.html,
+merged by build_dashboard.py).
 
-Unlike build_clusters.py (which picks one "official" k per role via
-silhouette score for reuse elsewhere, e.g. compare_self.py), this script
-fits several k values per role on the fly purely for the dashboard's
-cluster-count slider. It also precomputes percentile reference curves per
-(role, tier, feature) so the published dashboard can switch game window,
-role, reference tier, and cluster count entirely client-side with no
-server/recompute step.
+The page recomputes everything it shows in the browser (dashboard/profile_math.js), so
+the game-window, champion, role, region and tier filters work with no server. This
+script therefore exports, per role:
+- your games: raw headline stats, champion-adjusted stats, per-game trait scores and
+  the champion's class (support subclasses applied);
+- reference curves per region and tier (percentile cutoffs of reference players'
+  averages): raw stats, champion-adjusted stats, trait profiles, and the champion-pool
+  baseline;
+- each trait's single-game reliability, the role's archetype signatures and gap list.
 
-Run from repo root:
-    python src/export_dashboard_data.py --riot-id "yourname#na1" --riot-id "smurf#na1"
+Run from repo root (after build_features.py, and build_timeline_features.py if you have
+timelines):
+    python src/export_dashboard_data.py
 """
 
 from __future__ import annotations
@@ -22,28 +23,28 @@ import argparse
 import base64
 import json
 import os
-import random
-import re
 
-import joblib
 import numpy as np
 import pandas as pd
 import requests
-from sklearn.cluster import KMeans
 
-from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
 from accounts import require_riot_ids
-from pipeline_io import iter_ndjson
-from playstyle_space import (
-    add_game_state_columns,
-    apply_outcome_adjuster,
-    name_clusters,
-    to_playstyle_space,
+from champion_classes import load_champion_classes, role_champion_class
+from dashboard_payload import json_number, pool_reference, reference_by_tier, style_scores
+from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
+from performance import (
+    FULL_OWN_GAMES,
+    MIN_OWN_GAMES,
+    apply_performance_adjuster,
+    fit_performance_adjuster,
+    gap_features_for_role,
 )
+from pipeline_io import iter_ndjson
+from playstyle_space import ROLE_ARCHETYPES, add_game_state_columns
+from style_profile import CONFIDENCE_THRESHOLDS
+from timeline_features import TIMELINE_FEATURE_COLUMNS
 
 FEATURE_COLUMNS = [f.name for f in ALL_FEATURE_FIELDS]
-RANDOM_STATE = 42
-K_OPTIONS = [3, 4, 5, 6]
 MIN_REFERENCE_SAMPLE = 20  # skip a (role, tier) reference if fewer *players* than this
 # Reference curves are built from per-player averages, not individual games: the
 # dashboard compares *your average* over a window, and an average over many games has
@@ -55,7 +56,6 @@ MIN_PRO_GAMES_FOR_REFERENCE = 5
 # (MIN_REFERENCE_SAMPLE) would rule every league out.
 MIN_PRO_REFERENCE_SAMPLE = 8
 BREAKPOINT_COUNT = 51  # percentile grid: 0, 2, 4, ..., 100
-PCA_AXIS_TOP_N = 3
 ALL_ROLES_KEY = "ALL"
 
 # Highest-to-lowest, so the "Compare vs." dropdown reads Challenger > Grandmaster >
@@ -104,15 +104,43 @@ HEADLINE_FEATURES = [
     ("max_cs_advantage_lane_opp", "Max CS lead on opponent", False),
 ]
 
-# Archetype names come from playstyle_space.name_clusters (dominant playstyle traits),
-# not from win-rate rank -- clusters are fit on outcome-adjusted features.
-TOP_CHAMPIONS_PER_CLUSTER = 5
+# Display labels for the gap list (headline labels are reused where they exist).
+GAP_FEATURE_LABELS = {
+    "lane_minions_first_10": "Lane minions by 10:00",
+    "lane_gold_diff_per_min": "Lane gold lead / min",
+    "turret_plates_taken": "Turret plates",
+    "cs_diff_at_10": "CS lead at 10:00",
+    "gold_diff_at_14": "Gold lead at 14:00",
+    "xp_diff_at_14": "XP lead at 14:00",
+    "early_deaths": "Deaths before 14:00",
+    "wards_killed_per_min": "Wards killed / min",
+    "damage_to_objectives_per_min": "Objective damage / min",
+    "epic_objective_participation": "Dragon / Herald / Baron participation",
+    "turret_participation": "Turret participation",
+    "early_objective_participation": "Early objective participation",
+    "solo_kills": "Solo kills",
+}
+# Units for a gap's size in game terms ("≈330 gold per 31-min game", "0.4 KDA").
+# Percent features are shown in percentage points instead.
+GAP_UNITS = {
+    "gold_earned_per_min": "gold", "cs_total_per_min": "CS", "damage_per_minute": "damage",
+    "deaths_per_min": "deaths", "vision_score_per_minute": "vision score",
+    "control_wards_per_min": "control wards", "wards_killed_per_min": "wards cleared",
+    "damage_to_objectives_per_min": "objective damage", "lane_gold_diff_per_min": "lane gold lead",
+    "kda": "KDA", "lane_minions_first_10": "minions", "max_cs_advantage_lane_opp": "CS",
+    "turret_plates_taken": "plates", "cs_diff_at_10": "CS", "gold_diff_at_14": "gold",
+    "xp_diff_at_14": "XP", "early_deaths": "deaths", "solo_kills": "solo kills",
+}
+# Shares shown as percentages on the page.
+PERCENT_FEATURES = [
+    "kill_participation", "team_damage_pct", "epic_objective_participation",
+    "turret_participation", "early_objective_participation",
+]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export interactive dashboard JSON payload.")
     parser.add_argument("--features-path", default="data/processed/participant_features.parquet")
-    parser.add_argument("--models-dir", default="models")
     parser.add_argument("--matches-path", default="data/raw/matches.ndjson")
     parser.add_argument("--match-ids-path", default="data/raw/match_ids.ndjson")
     parser.add_argument(
@@ -121,7 +149,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Riot ID to include, e.g. 'yourname#na1'. Repeatable. Defaults to RIOT_IDS in .env.",
     )
-    parser.add_argument("--population-sample", type=int, default=500, help="Scatter background points per role.")
+    parser.add_argument(
+        "--cached-icons-only",
+        action="store_true",
+        help="Don't contact Data Dragon; embed only champion icons already cached on disk.",
+    )
+    parser.add_argument(
+        "--timeline-features-path",
+        default="data/processed/timeline_features.parquet",
+        help="Early-game features (build_timeline_features.py). Optional: without it, traits use end-of-game features only.",
+    )
     parser.add_argument("--pro-features-path", default="data/processed/pro_player_features.parquet")
     parser.add_argument("--output-path", default="data/processed/dashboard_data.json")
     return parser.parse_args()
@@ -143,128 +180,6 @@ def load_game_creation_by_match_id(matches_path: str, match_ids: set[str]) -> di
         if match_id in match_ids:
             creation_by_id[match_id] = match.get("info", {}).get("gameCreation")
     return creation_by_id
-
-
-HEADLINE_LABEL_BY_FEATURE = {column: label for column, label, _ in HEADLINE_FEATURES}
-
-
-def prettify_feature_name(name: str) -> str:
-    if name in HEADLINE_LABEL_BY_FEATURE:
-        return HEADLINE_LABEL_BY_FEATURE[name]
-    label = name
-    for suffix, replacement in (("_per_minute", "/min"), ("_per_min", "/min"), ("_pct", " %")):
-        if label.endswith(suffix):
-            label = label[: -len(suffix)] + replacement
-            break
-    label = label.replace("_", " ")
-    return label[:1].upper() + label[1:]
-
-
-def describe_pca_axis(component: np.ndarray, feature_columns: list[str]) -> str:
-    # Walk loadings in descending magnitude order, but skip a feature whose label
-    # we've already used -- a few feature pairs (e.g. our own gold_earned_per_min vs.
-    # Riot's already-normalized gold_per_minute) are highly correlated and would
-    # otherwise show up as a confusing near-duplicate in the same caption.
-    order = np.argsort(-np.abs(component))
-    seen_labels: set[str] = set()
-    parts = []
-    for idx in order:
-        label = prettify_feature_name(feature_columns[idx])
-        normalized = re.sub(r"[^a-z0-9]", "", label.lower())
-        if normalized in seen_labels:
-            continue
-        seen_labels.add(normalized)
-        sign = "higher" if component[idx] >= 0 else "lower"
-        parts.append(f"{sign} {label}")
-        if len(parts) >= PCA_AXIS_TOP_N:
-            break
-    return ", ".join(parts)
-
-
-def build_role_payload(
-    role: str,
-    df: pd.DataFrame,
-    my_role_df: pd.DataFrame,
-    models_dir: str,
-    population_sample: int,
-) -> dict:
-    role_df = df[df["teamPosition"] == role].reset_index(drop=True)
-    artifact = joblib.load(os.path.join(models_dir, f"{role.lower()}_cluster.joblib"))
-
-    # Outcome-adjusted + standardized features (for naming) and their PCA projection.
-    adjusted_scaled = artifact["scaler"].transform(apply_outcome_adjuster(role_df, artifact["outcome_adjuster"]))
-    reduced_full = artifact["pca"].transform(adjusted_scaled)  # (n, pca_components)
-
-    rng = random.Random(RANDOM_STATE)
-    sample_idx = list(range(len(role_df)))
-    rng.shuffle(sample_idx)
-    sample_idx = sample_idx[: min(population_sample, len(sample_idx))]
-
-    scatter = {
-        "x": [round(float(v), 4) for v in reduced_full[sample_idx, 0]],
-        "y": [round(float(v), 4) for v in reduced_full[sample_idx, 1]],
-    }
-
-    my_reduced_full = (
-        to_playstyle_space(my_role_df, artifact) if len(my_role_df) else np.empty((0, reduced_full.shape[1]))
-    )
-
-    clusters_by_k: dict[str, dict] = {}
-    my_cluster_by_k: dict[str, list[int]] = {}
-    for k in K_OPTIONS:
-        if k >= len(role_df):
-            continue
-        kmeans = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10).fit(reduced_full)
-        labels_full = kmeans.labels_
-
-        win_by_cluster = pd.Series(role_df["win"].to_numpy()).groupby(labels_full).mean()
-        size_by_cluster = pd.Series(labels_full).value_counts()
-        naming = name_clusters(adjusted_scaled, labels_full, artifact["feature_columns"], role)
-        top_champions = (
-            pd.Series(role_df["championName"].to_numpy())
-            .groupby(labels_full)
-            .agg(lambda s: s.value_counts().index[:TOP_CHAMPIONS_PER_CLUSTER].tolist())
-        )
-
-        clusters_by_k[str(k)] = {
-            "sample_labels": [int(labels_full[i]) for i in sample_idx],
-            "summary": [
-                {
-                    "cluster": int(cluster_id),
-                    "n": int(size_by_cluster[cluster_id]),
-                    "win_rate": round(float(win_by_cluster[cluster_id]), 3),
-                    "name": naming[int(cluster_id)]["name"],
-                    "traits": naming[int(cluster_id)]["traits"],
-                    "low_traits": naming[int(cluster_id)]["low_traits"],
-                    "top_champions": top_champions[cluster_id],
-                }
-                for cluster_id in sorted(win_by_cluster.index)
-            ],
-        }
-
-        if len(my_reduced_full):
-            my_labels = kmeans.predict(my_reduced_full)
-        else:
-            my_labels = np.array([], dtype=int)
-        my_cluster_by_k[str(k)] = [int(v) for v in my_labels]
-
-    my_scatter_xy = [[round(float(x), 4), round(float(y), 4)] for x, y in my_reduced_full[:, :2].tolist()] if len(my_reduced_full) else []
-
-    # PCA components are expressed in *scaled feature* space -- component_[i] is the
-    # loading of each standardized feature onto axis i, so the top absolute loadings
-    # tell us what that axis mostly separates on.
-    pca_axis_labels = {
-        "x": describe_pca_axis(artifact["pca"].components_[0], artifact["feature_columns"]),
-        "y": describe_pca_axis(artifact["pca"].components_[1], artifact["feature_columns"]),
-    }
-
-    return {
-        "population_scatter": scatter,
-        "clusters_by_k": clusters_by_k,
-        "my_cluster_by_k": my_cluster_by_k,
-        "my_scatter_xy": my_scatter_xy,
-        "pca_axis_labels": pca_axis_labels,
-    }
 
 
 def player_averages(rows: pd.DataFrame, player_column: str, min_games: int, feature_columns: list[str]) -> pd.DataFrame:
@@ -409,7 +324,7 @@ def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str
     return reference
 
 
-def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
+def fetch_champion_icons(champion_names: set[str], download: bool = True) -> dict[str, str]:
     """Base64 data-URI icons for the given champion names, fetched from Data Dragon and
     cached on disk. Embedding as data URIs is required because the dashboard, once
     published as an Artifact, runs under a CSP that blocks image requests to external
@@ -421,13 +336,16 @@ def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
 
     os.makedirs(CHAMPION_ICON_CACHE_DIR, exist_ok=True)
 
-    version = None
-    try:
-        response = requests.get(DDRAGON_VERSIONS_URL, timeout=10)
-        response.raise_for_status()
-        version = response.json()[0]
-    except Exception as exc:
-        print(f"Warning: couldn't fetch Data Dragon version ({exc}); using any cached icons only.")
+    version = None  # stays None when not downloading: only cached icons get embedded
+    if download:
+        try:
+            response = requests.get(DDRAGON_VERSIONS_URL, timeout=10)
+            response.raise_for_status()
+            version = response.json()[0]
+        except Exception as exc:
+            print(f"Warning: couldn't fetch Data Dragon version ({exc}); using any cached icons only.")
+    else:
+        print("Icon download skipped (--cached-icons-only); using cached icons.")
 
     for champion in sorted(champion_names):
         cache_path = os.path.join(CHAMPION_ICON_CACHE_DIR, f"{champion}.png")
@@ -451,11 +369,87 @@ def fetch_champion_icons(champion_names: set[str]) -> dict[str, str]:
     return icons
 
 
+def merge_timeline_features(df: pd.DataFrame, path: str) -> pd.DataFrame:
+    """Attach early-game features by (matchId, puuid). Games without a stored timeline
+    keep NaN (never imputed). No file -> unchanged, with a note."""
+    if not os.path.exists(path):
+        print(f"No timeline features at {path}; traits will use end-of-game features only.")
+        return df
+    timeline = pd.read_parquet(path, columns=["matchId", "puuid", *TIMELINE_FEATURE_COLUMNS])
+    merged = df.drop(columns=[c for c in TIMELINE_FEATURE_COLUMNS if c in df.columns]).merge(
+        timeline, on=["matchId", "puuid"], how="left"
+    )
+    covered = merged[TIMELINE_FEATURE_COLUMNS[0]].notna().mean()
+    print(f"Timeline features merged: {covered:.0%} of rows have a timeline.")
+    return merged
+
+
+def build_role_payload(
+    role: str,
+    df: pd.DataFrame,
+    my_df: pd.DataFrame,
+    regions: list[str],
+    tiers: list[str],
+    champion_classes: dict[str, str],
+) -> tuple[dict, dict]:
+    """(role payload, {(matchId, puuid): per-game extras for your games in this role}).
+
+    Everything is fitted on the role's whole season population, so you and every
+    reference tier share one set of champion baselines and one trait scale.
+    """
+    role_df = df[df["teamPosition"] == role].reset_index(drop=True)
+    role_df["champion_class"] = [
+        role_champion_class(name, role, champion_classes) for name in role_df["championName"]
+    ]
+
+    scores, icc, traits = style_scores(role_df, role, champion_classes)
+
+    gap_features = gap_features_for_role(role)
+    performance_columns = [
+        c for c in dict.fromkeys([c for c, _, _ in HEADLINE_FEATURES] + list(gap_features)) if c in role_df.columns
+    ]
+    # ◆ view: champion, teammates' lead and game length removed (early stats: champion only).
+    performance_adjuster = fit_performance_adjuster(
+        role_df, performance_columns, champion_classes, early_columns=TIMELINE_FEATURE_COLUMNS
+    )
+    adjusted = apply_performance_adjuster(role_df, performance_adjuster)
+
+    pool_by_tier: dict = {}
+    for region in regions:
+        for tier in tiers:
+            subset = role_df[(role_df["region"] == region) & (role_df["tier"] == tier)]
+            if len(subset):
+                pool_by_tier.setdefault(region, {})[tier] = pool_reference(subset)
+
+    payload = {
+        "traits": traits,
+        "trait_reliability": {t: json_number(icc.get(t)) for t in traits},
+        "archetypes": ROLE_ARCHETYPES.get(role, {}),
+        "gap_features": {f: list(spec) for f, spec in gap_features.items() if f in role_df.columns},
+        "style_reference": reference_by_tier(role_df, scores, regions, tiers),
+        "adjusted_reference": reference_by_tier(role_df, adjusted, regions, tiers),
+        # Adjusted values are at this game length, so per-minute gaps convert to per-game here.
+        "median_game_minutes": json_number(float((role_df["gameLength"] / 60).median())),
+        "pool_reference": pool_by_tier,
+    }
+
+    mine = role_df["puuid"].isin(set(my_df["puuid"])).to_numpy()
+    extras = {}
+    for i in role_df.index[mine]:
+        extras[(role_df.at[i, "matchId"], role_df.at[i, "puuid"])] = {
+            "championClass": role_df.at[i, "champion_class"],
+            "traits": {t: json_number(scores.at[i, t]) for t in traits},
+            "adjusted": {c: json_number(adjusted.at[i, c]) for c in performance_columns},
+        }
+    return payload, extras
+
+
 def run(args: argparse.Namespace) -> None:
     df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
+    df = merge_timeline_features(df, args.timeline_features_path)
     riot_ids = require_riot_ids(args.riot_id)
 
-    # Everything -- reference curves, clustering population, and your own games -- is
+    # Everything -- reference curves, style baselines, and your own games -- is
     # restricted to one season so you're never compared across a stat-baseline shift.
     season = current_season(df)
     if season is not None:
@@ -512,34 +506,18 @@ def run(args: argparse.Namespace) -> None:
     else:
         pro_reference, pro_leagues, pro_player_profiles = {}, [], {}
 
+    champion_classes = load_champion_classes()
     roles_payload = {}
-    games_by_role_index: dict[str, list[int]] = {role: [] for role in VALID_ROLES}
+    game_extras: dict[tuple[str, str], dict] = {}
     for role in VALID_ROLES:
-        my_role_df = my_df[my_df["teamPosition"] == role].reset_index(drop=True)
-        games_by_role_index[role] = my_df.index[my_df["teamPosition"] == role].tolist()
-        print(f"Building cluster/scatter payload for {role} ({len(my_role_df)} of your games)...")
-        roles_payload[role] = build_role_payload(role, df, my_role_df, args.models_dir, args.population_sample)
-
-    # Attach each of your games' scatter coords + cluster-by-k, matched back to my_df order.
-    scatter_xy_by_row: dict[int, list[float]] = {}
-    cluster_by_k_by_row: dict[int, dict[str, int]] = {}
-    for role in VALID_ROLES:
-        role_indices = games_by_role_index[role]
-        role_payload = roles_payload[role]
-        for local_i, global_i in enumerate(role_indices):
-            if local_i < len(role_payload["my_scatter_xy"]):
-                scatter_xy_by_row[global_i] = role_payload["my_scatter_xy"][local_i]
-            cluster_by_k_by_row[global_i] = {
-                k: labels[local_i] for k, labels in role_payload["my_cluster_by_k"].items() if local_i < len(labels)
-            }
+        print(f"Building style, pool and performance payload for {role}...")
+        role_payload, extras = build_role_payload(role, df, my_df, regions, tiers, champion_classes)
+        roles_payload[role] = role_payload
+        game_extras.update(extras)
 
     games = []
-    for i, row in my_df.iterrows():
-        feature_values = {}
-        for column, _, _ in HEADLINE_FEATURES:
-            value = row[column]
-            feature_values[column] = round(float(value), 4) if pd.notna(value) else None
-
+    for _, row in my_df.iterrows():
+        feature_values = {column: json_number(row[column]) for column, _, _ in HEADLINE_FEATURES}
         games.append(
             {
                 "matchId": row["matchId"],
@@ -549,13 +527,12 @@ def run(args: argparse.Namespace) -> None:
                 "win": bool(row["win"]),
                 "gameCreation": int(row["gameCreation"]) if pd.notna(row["gameCreation"]) else None,
                 "features": feature_values,
-                "scatterXY": scatter_xy_by_row.get(i),
-                "clusterByK": cluster_by_k_by_row.get(i, {}),
+                **game_extras.get((row["matchId"], row["puuid"]), {}),
             }
         )
 
     print("Fetching champion icons...")
-    champion_icons = fetch_champion_icons(set(my_df["championName"].unique()))
+    champion_icons = fetch_champion_icons(set(my_df["championName"].unique()), download=not args.cached_icons_only)
     print(f"  {len(champion_icons)} icon(s) available.")
 
     # Per-account summaries, for notebook/debug introspection only -- the published
@@ -578,25 +555,23 @@ def run(args: argparse.Namespace) -> None:
         "season": season,
         "accounts": list(accounts_summary.keys()),
         "accounts_summary": accounts_summary,
-        "k_options": K_OPTIONS,
+        "min_own_games": MIN_OWN_GAMES,
+        "full_own_games": FULL_OWN_GAMES,
+        "confidence_thresholds": [list(t) for t in CONFIDENCE_THRESHOLDS],
         "tiers": tiers,
         "regions": regions,
         "region_display_names": REGION_DISPLAY_NAMES,
         "headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in HEADLINE_FEATURES],
+        "feature_labels": {**{c: l for c, l, _ in HEADLINE_FEATURES}, **GAP_FEATURE_LABELS},
+        "percent_features": PERCENT_FEATURES,
+        "gap_units": GAP_UNITS,
         "pro_leagues": pro_leagues,
         "pro_headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in PRO_HEADLINE_FEATURES],
         "champion_icons": champion_icons,
         "reference": reference,
         "pro_reference": pro_reference,
         "pro_player_profiles": pro_player_profiles,
-        "roles": {
-            role: {
-                "population_scatter": roles_payload[role]["population_scatter"],
-                "clusters_by_k": roles_payload[role]["clusters_by_k"],
-                "pca_axis_labels": roles_payload[role]["pca_axis_labels"],
-            }
-            for role in VALID_ROLES
-        },
+        "roles": roles_payload,
         "games": games,
     }
 

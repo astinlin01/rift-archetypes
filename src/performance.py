@@ -4,10 +4,13 @@ Performance comparison (Phase 4): how your stats rank against a reference tier.
 Two views per stat, side by side:
 - raw: your average vs the tier's player averages (being ahead *is* the point here, so
   no outcome adjustment).
-- on your champions: every game's stat minus what's typical on that champion (champion
-  only -- the game state is deliberately left in, so winning still counts). The gap
-  between the two views is informative on its own: "35th raw -> 62nd on your champions"
-  means your low damage comes from what you pick, not how you play it.
+- on your champions, in an even game: each game's stat with the context you don't control
+  removed -- the champion played, your teammates' lead and game length (the same context
+  the style profile removes). Your own lane lead stays in, so out-laning people still
+  counts. Without the teammates' part, every gold-type stat partly re-measured winning
+  (Challenger bot laners' adjusted gold/min correlated 0.60 with their win rate; 0.32
+  with it removed). The gap between the two views is informative on its own: "35th raw
+  -> 62nd on your champions" means your low damage comes from what you pick.
 
 Champion adjustment instead of class matching: it handles mixed pools without splitting
 your games into per-class panels, and it's finer than class (Jinx and Ezreal are both
@@ -23,7 +26,7 @@ import math
 import pandas as pd
 from scipy.stats import percentileofscore
 
-from playstyle_space import MIN_CHAMPION_GAMES
+from playstyle_space import MIN_CHAMPION_GAMES, apply_outcome_adjuster, fit_outcome_adjuster
 from style_profile import apply_early_adjuster, fit_early_adjuster, trait_percentiles
 
 MIN_REFERENCE_PLAYER_GAMES = 10
@@ -95,6 +98,62 @@ def fit_champion_adjuster(
     return fit_early_adjuster(role_df, columns, champion_classes, min_champion_games)
 
 
+# Applying it is the early-feature adjuster's apply step, too.
+apply_champion_adjuster = apply_early_adjuster
+
+
+def fit_performance_adjuster(
+    role_df: pd.DataFrame,
+    columns: list[str],
+    champion_classes: dict[str, str],
+    early_columns: list[str] = (),
+    min_champion_games: int = MIN_CHAMPION_GAMES,
+) -> dict:
+    """The ◆ view: end-of-game stats adjusted for champion, teammates' lead and game length
+    (the style profile's adjuster, on these columns); early stats (<= 14:00) for champion
+    only, since the end-of-game context comes after them. Fit on the whole role population."""
+    early = [c for c in columns if c in set(early_columns)]
+    full = [c for c in columns if c not in set(early)]
+    return {
+        "columns": list(columns),
+        "full": fit_outcome_adjuster(role_df, champion_classes, min_champion_games, feature_columns=full) if full else None,
+        "early": fit_early_adjuster(role_df, early, champion_classes, min_champion_games) if early else None,
+    }
+
+
+def apply_performance_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
+    """Adjusted copies of the adjuster's columns, in readable units. Missing stays missing
+    (the regression fills gaps with medians to fit; those must not come back as data)."""
+    parts = []
+    if adjuster["full"] is not None:
+        full = apply_outcome_adjuster(rows, adjuster["full"])
+        parts.append(full.where(rows[full.columns].notna()))
+    if adjuster["early"] is not None:
+        parts.append(apply_early_adjuster(rows, adjuster["early"]))
+    return pd.concat(parts, axis=1)[adjuster["columns"]]
+
+
+def _apply_adjuster(rows: pd.DataFrame, adjuster: dict) -> pd.DataFrame:
+    if "full" in adjuster:
+        return apply_performance_adjuster(rows, adjuster)
+    return apply_early_adjuster(rows, adjuster)
+
+
+def gap_size(
+    feature: str, your_avg: float, median: float, game_minutes: float, percent_features: list[str]
+) -> dict:
+    """How big a gap is in game terms, so a tight reference spread can't make a small
+    difference look dramatic. Per-minute stats -> per game of the role's typical length
+    (adjusted values are already at that length); 0-1 shares -> percentage points; anything
+    else -> the plain difference in its own units."""
+    diff = abs(median - your_avg)
+    if feature.endswith("_per_min") or feature.endswith("_per_minute"):
+        return {"amount": diff * game_minutes, "per_game": True}
+    if feature in percent_features:
+        return {"amount": diff * 100.0, "per_game": False}
+    return {"amount": diff, "per_game": False}
+
+
 def own_sample_status(games: int) -> str:
     if games < MIN_OWN_GAMES:
         return "insufficient"
@@ -116,10 +175,10 @@ def compare_features(
 ) -> pd.DataFrame:
     """Per stat: your average, the reference players' mean, your percentile among the
     reference players' averages (players with >= min_games), and how many players.
-    With an adjuster, both sides are champion-adjusted first."""
+    With an adjuster (champion-only or the ◆ performance one), both sides are adjusted first."""
     if adjuster is not None:
-        mine = apply_early_adjuster(my_rows, adjuster)[columns]
-        reference = apply_early_adjuster(reference_rows, adjuster)[columns]
+        mine = _apply_adjuster(my_rows, adjuster)[columns]
+        reference = _apply_adjuster(reference_rows, adjuster)[columns]
     else:
         mine = my_rows[columns].astype(float)
         reference = reference_rows[columns].astype(float)

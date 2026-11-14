@@ -156,3 +156,90 @@ def test_style_stats_are_never_gaps():
     for style in ["damage_taken_per_min", "heal_on_teammates_per_min", "cc_time_per_min",
                   "team_gold_share", "team_damage_pct", "wards_placed_per_min"]:
         assert style not in features
+
+
+# --- "On your champions, in an even game" adjustment ---------------------------------------------
+# The ◆ view and the gaps remove what's outside your control: the champion played, your
+# teammates' lead (your 4 teammates vs the 4 enemies other than your lane opponent) and game
+# length -- the same context the style profile removes. Your own lane lead stays in.
+# Early (timeline, <= 14:00) stats are champion-only: the end-of-game context comes after them.
+
+from performance import apply_performance_adjuster, fit_performance_adjuster, gap_size
+
+PERF_CLASSES = {"jinx": "Marksman", "ezreal": "Marksman"}
+
+
+def even_game_df(seed: int = 0, n: int = 4000) -> pd.DataFrame:
+    """gold = champion offset (Jinx +40) + 0.5 x teammates' lead + player skill (+30 for
+    'good') + noise. cs_diff_at_10 (early) also tracks teammates' lead, so we can check it
+    is *not* adjusted for it."""
+    rng = np.random.default_rng(seed)
+    champs = np.where(np.arange(n) % 2 == 0, "Jinx", "Ezreal")
+    good = np.arange(n) % 10 == 0
+    lead = rng.normal(0, 100, n)
+    return pd.DataFrame({
+        "puuid": np.where(good, "good", [f"p{i % 50}" for i in range(n)]),
+        "championName": champs,
+        "gameLength": rng.uniform(20, 38, n) * 60,
+        "teammates_gold_diff_per_min": lead,
+        "teammates_kill_diff_per_min": lead / 300,
+        "gold": 450 + np.where(champs == "Jinx", 40, 0) + 0.5 * lead + np.where(good, 30, 0) + rng.normal(0, 20, n),
+        "cs_diff_at_10": 0.02 * lead + rng.normal(0, 3, n),
+    })
+
+
+def adjust_even(df):
+    adjuster = fit_performance_adjuster(df, ["gold", "cs_diff_at_10"], PERF_CLASSES, early_columns=["cs_diff_at_10"])
+    return apply_performance_adjuster(df, adjuster)
+
+
+def test_even_game_removes_teammates_lead_and_champion():
+    df = even_game_df()
+    out = adjust_even(df)
+    assert abs(np.corrcoef(out["gold"], df["teammates_gold_diff_per_min"])[0, 1]) < 0.03
+    by_champ = out["gold"].groupby(df["championName"]).mean()
+    assert by_champ["Jinx"] == pytest.approx(by_champ["Ezreal"], abs=2)
+
+
+def test_even_game_keeps_player_skill_and_units():
+    df = even_game_df()
+    out = adjust_even(df)
+    good = out.loc[df["puuid"] == "good", "gold"].mean()
+    others = out.loc[df["puuid"] != "good", "gold"].mean()
+    assert good - others == pytest.approx(30, abs=4)        # built in as +30
+    assert out["gold"].mean() == pytest.approx(df["gold"].mean(), abs=2)  # still gold/min
+
+
+def test_early_stats_are_champion_only():
+    df = even_game_df()
+    out = adjust_even(df)
+    # cs_diff_at_10 tracks the lead by construction (0.02 x sd 100 vs noise 3 -> r ~ 0.55);
+    # it must stay, since the end-of-game lead comes after 10:00.
+    assert np.corrcoef(out["cs_diff_at_10"], df["teammates_gold_diff_per_min"])[0, 1] > 0.4
+
+
+def test_missing_values_stay_missing():
+    df = even_game_df(n=400)
+    df.loc[[3, 7], "gold"] = np.nan
+    df.loc[[5], "cs_diff_at_10"] = np.nan
+    out = adjust_even(df)
+    assert out["gold"].isna().sum() == 2 and out.loc[[3, 7], "gold"].isna().all()
+    assert out["cs_diff_at_10"].isna().sum() == 1
+
+
+# --- Gap size in game terms ------------------------------------------------------------------------
+
+@pytest.mark.parametrize("feature, you, median, expected", [
+    # per-minute stat -> per game at the role's typical length: (515 - 504) x 30 = 330 gold
+    ("gold_earned_per_min", 504.0, 515.0, {"amount": 330.0, "per_game": True}),
+    # lower-is-better: (0.25 - 0.20) x 30 = 1.5 deaths
+    ("deaths_per_min", 0.25, 0.20, {"amount": 1.5, "per_game": True}),
+    # percent stat (stored as a 0-1 share) -> percentage points: (0.62 - 0.55) x 100 = 7
+    ("kill_participation", 0.55, 0.62, {"amount": 7.0, "per_game": False}),
+    # anything else -> plain difference in its own units
+    ("kda", 3.1, 3.5, {"amount": 0.4, "per_game": False}),
+])
+def test_gap_size(feature, you, median, expected):
+    got = gap_size(feature, you, median, game_minutes=30.0, percent_features=["kill_participation"])
+    assert got["amount"] == pytest.approx(expected["amount"])
+    assert got["per_game"] == expected["per_game"]

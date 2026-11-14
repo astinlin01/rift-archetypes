@@ -120,7 +120,7 @@ Checks that the adjustment does what the README claims, per role, raw vs adjuste
 - Run: `python src/method_diagnostics.py`
 
 ### src/build_clusters.py
-Fits a separate adjustment → `StandardScaler` → `PCA` → `KMeans` pipeline per role (role is the dominant driver of raw stats, so clustering is done within-role rather than globally). Sweeps k and reports silhouette score to pick the cluster count per role (override with `--k-override ROLE=K`). The centroid report lists each cluster's name, win rate and most common champions.
+Fits a separate adjustment → `StandardScaler` → `PCA` → `KMeans` pipeline per role (role is the dominant driver of raw stats, so clustering is done within-role rather than globally). Sweeps k and reports silhouette score to pick the cluster count per role (override with `--k-override ROLE=K`). The centroid report lists each cluster's name, win rate and most common champions. **Exploratory only:** the dashboard no longer uses these clusters. Silhouette scores of 0.12-0.15 showed the data is a continuum rather than groups, so the main view is trait axes with soft archetype labels (`src/style_profile.py`).
 
 - Models: `models/<role>_cluster.joblib`
 - Cluster assignments: `data/processed/participant_clusters.parquet`
@@ -142,30 +142,27 @@ Their download is Google Drive-hosted and its anonymous-download quota is someti
 - Output: `data/processed/pro_player_features.parquet`
 
 ### src/export_dashboard_data.py + src/build_dashboard.py
-Builds a self-contained, **interactive** HTML "scouting report" dashboard. `export_dashboard_data.py` precomputes everything up front for every configured account, every role, every reference tier, and cluster counts k=3-6 (percentile reference curves via percentile breakpoints, PCA scatter positions + per-point cluster assignments, PCA axis explainability captions), so the dashboard filters entirely client-side with no server round trip. `build_dashboard.py` merges the resulting `data/processed/dashboard_data.json` into `dashboard/template.html` to produce a single HTML file.
+Builds a self-contained, **interactive** HTML "scouting report": one static page that can be opened locally or hosted anywhere (no server). `export_dashboard_data.py` exports, per role: your games (raw headline stats, champion-adjusted stats, per-game trait scores, champion class) and reference curves per region and tier (the 0th-100th percentile cutoffs of reference players' averages, players with 10+ games) for raw stats, champion-adjusted stats, trait profiles and the champion-pool baseline, plus each trait's single-game reliability, the role's archetype signatures and gap list. The building blocks live in `src/dashboard_payload.py`. `build_dashboard.py` merges the JSON and `dashboard/profile_math.js` into `dashboard/template.html`.
 
-Dashboard filters:
-- **Account**: switch between configured Riot IDs (e.g. main + smurf) entirely in the browser.
-- **Game window**: last 20 / last 50 / all time.
-- **Role**: any role you have games in, or "All Roles" for an overall (non-role-specific) view. The percentile chart still works there (aggregated across roles), but the archetype cards and cluster-space scatter require picking a specific role, since clustering is fit separately per role.
-- **Champion**: narrow to one champion within the selected role, or all champions.
-- **Region**: which platform's ranked population to compare against (NA, KR, ...; only regions with enough sample size for the selected role are offered).
-- **Compare vs.**: reference tier within the selected region, ordered Challenger > Grandmaster > Master > Diamond (whichever tiers have enough sample size).
-- **Playstyles (k)**: 3 to 6 clusters; cards, scatter colors, legend, and table archetypes all update together.
+The page recomputes everything in the browser when a filter changes, using `dashboard/profile_math.js`: a JavaScript copy of the profile, label, confidence, pool and gap math. `tests/test_dashboard_math.py` runs it through Node against the Python functions on the same inputs, so the two copies can't drift apart.
 
-Note: clustering (archetype cards, cluster-space scatter) is fit on the **combined** population across all regions for a role. It isn't split by region. Only the percentile-comparison reference curves are region-specific.
+Sections, top to bottom:
+- **At a glance**: closest archetype, pool size and top champion, biggest gaps.
+- **Your playstyle**: trait percentiles vs the selected tier (diverging bars from the 50th), soft archetype labels (match %), and a confidence level per trait from its single-game reliability and your game count.
+- **What you play**: effective number of champions, most-played champion, and your class mix next to the tier's average player's. The game window applies; the champion filter doesn't.
+- **How you compare**: each headline stat as a raw percentile (○) and "on your champions, in an even game" (◆): champion, teammates' lead and game length removed with the style profile's adjuster (early, timeline stats: champion only). Your own lane lead stays in.
+- **Biggest gaps**: your weakest ◆ stats, at most one per theme, noise-filtered, each with its size in game terms (per-minute stats × the role's median game length; shares in percentage points).
+- **vs. Professional Play** and the **games table**.
 
-Each archetype card shows the cluster's dominant traits and most common champions, plus two comparisons against the population: your win rate within that cluster, and your *share* of games landing in it (over/under-represented vs. the population's own distribution across clusters).
+Dashboard filters: **Account**, **Game window** (last 20 / last 50 / season), **Role** (or All Roles, where the per-role sections ask you to pick one), **Champion**, **Region** and **Compare vs.** (reference tier). A section without enough data says so with the numbers ("insufficient data (n=X)"): under 5 of your games, or under 20 reference players with 10+ games. With 5-9 of your games, results show with a low-confidence note.
 
-Champion icons are fetched from Data Dragon at export time, cached under `data/raw/champion_icon_cache/`, and embedded as base64 data URIs in the dashboard JSON, so the HTML file works offline and under strict content security policies.
-
-Note: cluster counts here are fit fresh per k on the same per-role PCA space purely for the dashboard's slider. They don't change or replace the "official" per-role models in `models/` that `compare_self.py` uses (those keep whatever k `build_clusters.py`'s silhouette search picked).
+Champion icons are fetched from Data Dragon at export time, cached under `data/raw/champion_icon_cache/`, and embedded as base64 data URIs, so the HTML file works offline. `--cached-icons-only` skips the download and embeds only cached icons.
 
 A separate **"vs. Professional Play"** section compares you against LCK/LPL pro players (a league toggle switches between them), built from `build_pro_features.py`'s output if present. It uses a smaller feature set than the solo-queue comparison since Oracle's Elixir's schema doesn't cover everything Riot's match-v5 API does.
 
 Below that, **"Which pro do you play like?"** finds your nearest pro player match: each qualifying pro (5+ games in a role this season) gets a season-average stat profile, standardized against the pro population's own mean/std per feature; your current stat profile (respecting every active filter: account, window, role, champion) is standardized the same way and compared by Euclidean distance to find the 3 closest pros in the selected league. This runs entirely client-side.
 
-- Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/export_dashboard_data.py` (accounts from `RIOT_IDS`, or repeat `--riot-id`) then `python src/build_dashboard.py`
+- Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/build_timeline_features.py` (optional, adds early-game traits) then `python src/export_dashboard_data.py` (accounts from `RIOT_IDS`, or repeat `--riot-id`) then `python src/build_dashboard.py`
 
 ## Notebooks
 
