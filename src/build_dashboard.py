@@ -3,7 +3,7 @@ Merge dashboard/template.html, the exported dashboard JSON payload and the share
 math (dashboard/profile_math.js) into a single self-contained HTML file -- a static page
 that can be hosted anywhere (GitHub Pages) or opened locally.
 
-Run from repo root (after export_dashboard_data.py):
+Writes docs/index.html, the GitHub Pages site. Run from repo root (after export_dashboard_data.py):
     python src/build_dashboard.py
 """
 
@@ -21,7 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--template-path", default="dashboard/template.html")
     parser.add_argument("--data-path", default="data/processed/dashboard_data.json")
     parser.add_argument("--math-path", default="dashboard/profile_math.js")
-    parser.add_argument("--output-path", default="dashboard/scouting_report.html")
+    # docs/ is what GitHub Pages serves, so a rebuild is also the site update.
+    parser.add_argument("--output-path", default="docs/index.html")
     return parser.parse_args()
 
 
