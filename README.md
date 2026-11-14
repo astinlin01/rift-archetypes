@@ -2,11 +2,11 @@
 
 **What kind of League of Legends player are you, apart from whether you won?**
 
+**[→ Live scouting report](https://astinlin01.github.io/rift-archetypes/)** · a static page built by this pipeline
+
 Rift Archetypes pulls ~26k season-16 high-elo solo queue games (~260k player-games, Diamond → Challenger, NA + KR) from the Riot API and measures each player's *playstyle* while controlling for the champion they played and how their teammates did. The result is an interactive scouting report: your style traits, the archetypes you're closest to, and percentile comparisons against every reference tier and against LCK/LPL pros.
 
-<!-- TODO: add a dashboard screenshot at docs/dashboard.png after the trait-axis dashboard lands, then uncomment:
-![Scouting report dashboard](docs/dashboard.png)
--->
+[![Scouting report: playstyle traits for a Bottom laner vs Challenger NA](docs/dashboard.png)](https://astinlin01.github.io/rift-archetypes/)
 
 ## Results
 
