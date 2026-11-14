@@ -79,11 +79,12 @@ The fixture games are real match payloads with every player identity replaced by
 python -m venv venv
 venv\Scripts\activate            # source venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
-copy .env.example .env           # cp on macOS/Linux; then fill in RIOT_API_KEY and RIOT_IDS
+copy .env.example .env           # cp on macOS/Linux; then fill in RIOT_API_KEY, RIOT_IDS and PUBLISH_RIOT_IDS
 ```
 
 - `RIOT_API_KEY`: a development key from the [Riot developer portal](https://developer.riotgames.com). These expire every 24h.
 - `RIOT_IDS`: your account(s) as `gameName#tagLine`, comma-separated. Every script that takes `--riot-id` defaults to this.
+- `PUBLISH_RIOT_IDS`: the accounts shown on the public dashboard. The dashboard export uses only this list (or `--riot-id`) and never falls back to `RIOT_IDS`, so an account is published only if you list it.
 
 ## Pipeline
 

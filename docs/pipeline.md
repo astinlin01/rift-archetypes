@@ -162,7 +162,7 @@ A separate **"vs. Professional Play"** section compares you against LCK/LPL pro 
 
 Below that, **"Which pro do you play like?"** finds your nearest pro player match: each qualifying pro (5+ games in a role this season) gets a season-average stat profile, standardized against the pro population's own mean/std per feature; your current stat profile (respecting every active filter: account, window, role, champion) is standardized the same way and compared by Euclidean distance to find the 3 closest pros in the selected league. This runs entirely client-side.
 
-- Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/build_timeline_features.py` (optional, adds early-game traits) then `python src/export_dashboard_data.py` (accounts from `RIOT_IDS`, or repeat `--riot-id`) then `python src/build_dashboard.py`
+- Run: `python src/build_pro_features.py` (optional, for the pro comparison) then `python src/build_timeline_features.py` (optional, adds early-game traits) then `python src/export_dashboard_data.py` (publishes the accounts in `PUBLISH_RIOT_IDS`, or repeat `--riot-id`; never `RIOT_IDS`) then `python src/build_dashboard.py`
 
 ## Notebooks
 

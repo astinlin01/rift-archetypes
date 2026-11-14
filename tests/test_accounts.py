@@ -35,3 +35,29 @@ def test_require_explains_how_to_configure_when_empty(monkeypatch):
     monkeypatch.setenv("RIOT_IDS", "")
     with pytest.raises(SystemExit, match="RIOT_IDS"):
         require_riot_ids([])
+
+
+# --- Which accounts go on the public page ----------------------------------------------------------
+# PUBLISH_RIOT_IDS is separate from RIOT_IDS (all your accounts, used for fetching), so a plain
+# rebuild can't put an account on the public site that you didn't choose to publish.
+
+from accounts import require_publish_riot_ids
+
+
+def test_publish_uses_its_own_list(monkeypatch):
+    monkeypatch.setenv("RIOT_IDS", "main#na1,alt#na1")
+    monkeypatch.setenv("PUBLISH_RIOT_IDS", "main#na1")
+    assert require_publish_riot_ids([]) == ["main#na1"]
+
+
+def test_publish_prefers_cli_ids(monkeypatch):
+    monkeypatch.setenv("PUBLISH_RIOT_IDS", "main#na1")
+    assert require_publish_riot_ids(["cli#na1"]) == ["cli#na1"]
+
+
+def test_publish_never_falls_back_to_all_accounts(monkeypatch):
+    # Unset publish list + set RIOT_IDS must stop, not quietly publish every account.
+    monkeypatch.setenv("RIOT_IDS", "main#na1,alt#na1")
+    monkeypatch.setenv("PUBLISH_RIOT_IDS", "")
+    with pytest.raises(SystemExit, match="PUBLISH_RIOT_IDS"):
+        require_publish_riot_ids([])

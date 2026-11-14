@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from accounts import require_riot_ids
+from accounts import require_publish_riot_ids
 from champion_classes import load_champion_classes, role_champion_class
 from dashboard_payload import json_number, pool_reference, reference_by_tier, style_scores
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
@@ -147,7 +147,7 @@ def parse_args() -> argparse.Namespace:
         "--riot-id",
         action="append",
         default=None,
-        help="Riot ID to include, e.g. 'yourname#na1'. Repeatable. Defaults to RIOT_IDS in .env.",
+        help="Riot ID to publish, e.g. 'yourname#na1'. Repeatable. Defaults to PUBLISH_RIOT_IDS in .env.",
     )
     parser.add_argument(
         "--cached-icons-only",
@@ -447,7 +447,7 @@ def build_role_payload(
 def run(args: argparse.Namespace) -> None:
     df = add_game_state_columns(add_derived_features(pd.read_parquet(args.features_path)))
     df = merge_timeline_features(df, args.timeline_features_path)
-    riot_ids = require_riot_ids(args.riot_id)
+    riot_ids = require_publish_riot_ids(args.riot_id)
 
     # Everything -- reference curves, style baselines, and your own games -- is
     # restricted to one season so you're never compared across a stat-baseline shift.
