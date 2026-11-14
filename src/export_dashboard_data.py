@@ -30,7 +30,15 @@ import requests
 
 from accounts import require_publish_riot_ids
 from champion_classes import load_champion_classes, role_champion_class
-from dashboard_payload import json_number, pool_reference, reference_by_tier, style_scores
+from dashboard_payload import (
+    crop_splash,
+    json_number,
+    player_trait_points,
+    pool_reference,
+    reference_by_tier,
+    splash_champions,
+    style_scores,
+)
 from feature_config import ALL_FEATURE_FIELDS, VALID_ROLES, add_derived_features, current_season
 from performance import (
     FULL_OWN_GAMES,
@@ -67,6 +75,9 @@ REGION_DISPLAY_NAMES = {"NA1": "NA"}
 DDRAGON_VERSIONS_URL = "https://ddragon.leagueoflegends.com/api/versions.json"
 DDRAGON_ICON_URL = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champion}.png"
 CHAMPION_ICON_CACHE_DIR = "data/raw/champion_icon_cache"
+# Splash art has no version in its URL. Cached already cropped for the player card.
+DDRAGON_SPLASH_URL = "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/{champion}_0.jpg"
+CHAMPION_SPLASH_CACHE_DIR = "data/raw/champion_splash_cache"
 
 PRO_LEAGUE_RANK = {"LCK": 0, "LPL": 1}
 MIN_PRO_PLAYER_GAMES = 5  # skip a pro player from the "which pro do you play like" list below this
@@ -152,7 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cached-icons-only",
         action="store_true",
-        help="Don't contact Data Dragon; embed only champion icons already cached on disk.",
+        help="Don't contact Data Dragon; embed only champion icons and splash art already cached on disk.",
     )
     parser.add_argument(
         "--timeline-features-path",
@@ -324,6 +335,31 @@ def build_reference_curves(df: pd.DataFrame, regions: list[str], tiers: list[str
     return reference
 
 
+def fetch_champion_splashes(champion_names: set[str], download: bool = True) -> dict[str, str]:
+    """Base64 data-URI splash art for the player card, cropped to the card's shape and
+    compressed (crop_splash), so each is ~60 KB instead of ~250 KB. The original is cached,
+    so the crop can be tuned without downloading again."""
+    splashes: dict[str, str] = {}
+    os.makedirs(CHAMPION_SPLASH_CACHE_DIR, exist_ok=True)
+    for champion in sorted(champion_names):
+        cache_path = os.path.join(CHAMPION_SPLASH_CACHE_DIR, f"{champion}_0.jpg")  # Data Dragon's name
+        if not os.path.exists(cache_path) and download:
+            try:
+                response = requests.get(DDRAGON_SPLASH_URL.format(champion=champion), timeout=15)
+                if response.status_code == 200:
+                    with open(cache_path, "wb") as outfile:
+                        outfile.write(response.content)
+                else:
+                    print(f"  no Data Dragon splash for '{champion}' (status {response.status_code})")
+            except Exception as exc:
+                print(f"  failed to fetch splash for '{champion}': {exc}")
+        if os.path.exists(cache_path):
+            with open(cache_path, "rb") as infile:
+                cropped = crop_splash(infile.read())
+            splashes[champion] = "data:image/jpeg;base64," + base64.b64encode(cropped).decode("ascii")
+    return splashes
+
+
 def fetch_champion_icons(champion_names: set[str], download: bool = True) -> dict[str, str]:
     """Base64 data-URI icons for the given champion names, fetched from Data Dragon and
     cached on disk. Embedding as data URIs is required because the dashboard, once
@@ -427,6 +463,8 @@ def build_role_payload(
         "archetypes": ROLE_ARCHETYPES.get(role, {}),
         "gap_features": {f: list(spec) for f, spec in gap_features.items() if f in role_df.columns},
         "style_reference": reference_by_tier(role_df, scores, regions, tiers),
+        # Style map: every reference player's trait averages, in `traits` order.
+        "trait_points": player_trait_points(role_df, scores, traits, regions, tiers),
         "adjusted_reference": reference_by_tier(role_df, adjusted, regions, tiers),
         # Adjusted values are at this game length, so per-minute gaps convert to per-game here.
         "median_game_minutes": json_number(float((role_df["gameLength"] / 60).median())),
@@ -534,6 +572,11 @@ def run(args: argparse.Namespace) -> None:
     print("Fetching champion icons...")
     champion_icons = fetch_champion_icons(set(my_df["championName"].unique()), download=not args.cached_icons_only)
     print(f"  {len(champion_icons)} icon(s) available.")
+    print("Fetching player card splash art...")
+    champion_splashes = fetch_champion_splashes(
+        splash_champions(my_df, MIN_OWN_GAMES), download=not args.cached_icons_only
+    )
+    print(f"  {len(champion_splashes)} splash(es) available: {sorted(champion_splashes)}")
 
     # Per-account summaries, for notebook/debug introspection only -- the published
     # dashboard recomputes everything it shows from the filtered `games` list directly.
@@ -568,6 +611,7 @@ def run(args: argparse.Namespace) -> None:
         "pro_leagues": pro_leagues,
         "pro_headline_features": [{"feature": c, "label": l, "invert": inv} for c, l, inv in PRO_HEADLINE_FEATURES],
         "champion_icons": champion_icons,
+        "champion_splashes": champion_splashes,
         "reference": reference,
         "pro_reference": pro_reference,
         "pro_player_profiles": pro_player_profiles,

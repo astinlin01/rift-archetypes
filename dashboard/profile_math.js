@@ -181,6 +181,17 @@
     return { amount: diff, per_game: false };
   }
 
+  // Style map default axes: the two traits furthest from the 50th (your most distinctive),
+  // most distinctive first. rows = [{trait, percentile}]. null if fewer than two.
+  function defaultMapAxes(rows) {
+    var usable = rows.filter(function (r) { return isNum(r.percentile); });
+    if (usable.length < 2) return null;
+    usable = usable.slice().sort(function (a, b) {
+      return Math.abs(b.percentile - 50) - Math.abs(a.percentile - 50);
+    });
+    return [usable[0].trait, usable[1].trait];
+  }
+
   var ProfileMath = {
     mean: mean,
     percentileFromBreakpoints: percentileFromBreakpoints,
@@ -194,7 +205,8 @@
     topChampion: topChampion,
     classMix: classMix,
     biggestGaps: biggestGaps,
-    gapSize: gapSize
+    gapSize: gapSize,
+    defaultMapAxes: defaultMapAxes
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ProfileMath;

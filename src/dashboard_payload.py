@@ -159,3 +159,82 @@ def style_scores(
     keep = _eligible(role_df, min_reliability_games).to_numpy()
     icc = single_game_reliability(scores[keep], role_df.loc[keep, "puuid"]).reindex(names)
     return scores, icc, names
+
+
+# ---------- Style map ----------
+
+def player_trait_points(
+    rows: pd.DataFrame,
+    scores: pd.DataFrame,
+    traits: list[str],
+    regions: list[str],
+    tiers: list[str],
+    min_games: int = MIN_PLAYER_GAMES,
+    min_players: int = MIN_REFERENCE_PLAYERS,
+) -> dict:
+    """{region: {tier: [[trait averages in `traits` order], ...]}}: one point per reference
+    player with >= min_games games, for the style map. Anonymous on purpose (no puuid or
+    name). 3 decimals is far finer than a dot on screen; null = no data for that trait.
+    Tiers with fewer than min_players players are left out (the page says so)."""
+    points: dict = {}
+    for region in regions:
+        for tier in tiers:
+            mask = ((rows["region"] == region) & (rows["tier"] == tier)).to_numpy()
+            if not mask.any():
+                continue
+            subset = rows[mask]
+            keep = _eligible(subset, min_games).to_numpy()
+            if not keep.any():
+                continue
+            averages = scores.loc[mask, traits][keep].groupby(subset.loc[keep, "puuid"].to_numpy()).mean()
+            if len(averages) < min_players:
+                continue
+            points.setdefault(region, {})[tier] = [
+                [json_number(v, 3) for v in row] for row in averages.to_numpy()
+            ]
+    return points
+
+
+# ---------- Player card splash art ----------
+
+def splash_champions(games: pd.DataFrame, min_games: int) -> set[str]:
+    """Champions that get splash art on the player card: each account's most-played
+    champion per role (roles with >= min_games games, where the page shows a profile), plus
+    each account's overall most-played one for the all-roles view. Ties -> alphabetical."""
+    def top(series: pd.Series) -> str:
+        counts = series.value_counts()
+        return sorted(counts.index, key=lambda name: (-counts[name], name))[0]
+
+    champions = set()
+    for _, account_games in games.groupby("account"):
+        champions.add(top(account_games["championName"]))
+        for _, role_games in account_games.groupby("teamPosition"):
+            if len(role_games) >= min_games:
+                champions.add(top(role_games["championName"]))
+    return champions
+
+
+def crop_splash(image_bytes: bytes, width: int = 1200, height: int = 480, quality: int = 72) -> bytes:
+    """Crop a Data Dragon splash (1215x717) to the card's wide shape and re-encode small.
+
+    Keeps the full width and takes the band starting 3% down: splash art puts the
+    champion's head near the top (12% cut Kai'Sa's off), and the card overlays text on
+    the left, so the lower edge matters least."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    source_w, source_h = image.size
+    target_ratio = width / height
+    if source_w / source_h > target_ratio:  # too wide: trim the sides evenly
+        crop_w = round(source_h * target_ratio)
+        left = (source_w - crop_w) // 2
+        box = (left, 0, left + crop_w, source_h)
+    else:  # too tall (the usual case): keep a band from 12% down
+        crop_h = round(source_w / target_ratio)
+        top = min(round(source_h * 0.03), source_h - crop_h)
+        box = (0, top, source_w, top + crop_h)
+    out = BytesIO()
+    image.crop(box).resize((width, height), Image.LANCZOS).save(out, "JPEG", quality=quality, optimize=True, progressive=True)
+    return out.getvalue()

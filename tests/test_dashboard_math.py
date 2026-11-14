@@ -178,3 +178,20 @@ def test_gap_size_matches_python(feature, you, median):
     result = js("gapSize", feature, you, median, 30.0, ["kill_participation"])
     assert result["amount"] == pytest.approx(expected["amount"])
     assert result["per_game"] == expected["per_game"]
+
+
+# --- Style map default axes: your two most distinctive traits (furthest from the 50th) ---------------
+
+def test_default_map_axes():
+    rows = [
+        {"trait": "Lane Bully", "percentile": 73},
+        {"trait": "Vision Control", "percentile": 64},
+        {"trait": "Death-Prone", "percentile": 17},   # |17 - 50| = 33
+        {"trait": "Enchanter", "percentile": 15},     # |15 - 50| = 35
+        {"trait": "Damage Carry", "percentile": 48},
+    ]
+    assert js("defaultMapAxes", rows) == ["Enchanter", "Death-Prone"]
+
+
+def test_default_map_axes_needs_two_traits():
+    assert js("defaultMapAxes", [{"trait": "Lane Bully", "percentile": 73}]) is None

@@ -156,33 +156,62 @@
     background-position: -40px -60px, right -80px top -40px;
     pointer-events: none;
   }
-  .masthead-inner { max-width: 1040px; margin: 0 auto; position: relative; }
+  .masthead-inner { max-width: 1040px; margin: 0 auto; position: relative; z-index: 1; }
+
+  /* Player card: the main champion's splash behind the header, faded into the page on the
+     left where the text sits. */
+  .hero-art { position: absolute; inset: 0; background-size: cover; background-position: right 30%; opacity: 0; transition: opacity .3s; }
+  .hero-art::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      linear-gradient(90deg, var(--page) 28%, color-mix(in oklab, var(--page) 70%, transparent) 55%, color-mix(in oklab, var(--page) 25%, transparent) 100%),
+      linear-gradient(0deg, var(--page) 0%, transparent 30%);
+  }
+  .masthead.has-art .hero-art { opacity: 1; }
+  .hero-body { margin-top: 22px; display: grid; gap: 16px; }
+  .hero-kicker { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .hero-name { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: clamp(34px, 5.4vw, 56px); line-height: 1; margin-top: 4px; color: var(--accent-jade); text-transform: uppercase; letter-spacing: 0.02em; }
+  .hero-match { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+  .hero-match strong { color: var(--ink); }
+  .hero-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+           background: color-mix(in oklab, var(--surface) 80%, transparent); font-size: 13px; color: var(--ink-2); backdrop-filter: blur(4px); }
+  .badge b { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--accent); }
+  .hero-stats { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+  .hero-stat .label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .hero-stat .value { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 24px; margin-top: 2px; }
+  .hero-stat .value.good { color: var(--good); }
+  .hero-stat .value.bad { color: var(--critical); }
+  .hero-stat .foot { font-size: 12.5px; color: var(--ink-2); }
+  .hero-stat .foot .champ-icon { display: inline-block; vertical-align: -4px; margin-right: 2px; }
+  .hero-gaps { font-size: 13.5px; color: var(--ink-2); }
+  .hero-gaps strong { color: var(--critical); font-weight: 600; }
+  @media (max-width: 720px) {
+    .hero-art { background-position: 70% 20%; }
+    .hero-art::after { background: linear-gradient(0deg, var(--page) 0%, color-mix(in oklab, var(--page) 80%, transparent) 60%, color-mix(in oklab, var(--page) 55%, transparent) 100%); }
+  }
+
+  /* Style map */
+  .map-panel { padding: 16px 18px 12px; }
+  .map-controls { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+  #style-map svg { width: 100%; max-width: 760px; height: auto; display: block; margin: 0 auto; }
+  .map-arch, .map-landmark-label, .map-you-label { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .map-grid { stroke: var(--gridline); stroke-width: 1; }
+  .map-mid { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
+  .map-axis { fill: var(--ink-2); font-size: 13px; font-weight: 600; }
+  .map-tick { fill: var(--ink-muted); font-size: 11px; font-family: "IBM Plex Mono", monospace; }
+  .map-dot { fill: var(--ink-muted); opacity: .45; }
+  .map-arch { fill: var(--ink-muted); font-size: 12px; font-style: italic; opacity: .9; }
+  .map-landmark { fill: var(--slot-3); stroke: var(--surface); stroke-width: 1.5; }
+  .map-landmark-label { fill: var(--ink-2); font-size: 11.5px; font-weight: 600; }
+  .map-you { fill: var(--accent); stroke: var(--surface); stroke-width: 2.5; }
+  .map-you-halo { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .35; transform-box: fill-box; transform-origin: center; animation: halo 2.4s ease-out infinite; }
+  .map-you-label { fill: var(--accent); font-size: 13px; font-weight: 700; }
+  @keyframes halo { from { transform: scale(1); opacity: .5; } to { transform: scale(2.6); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .map-you-halo { animation: none; } }
+  .map-note { font-size: 12.5px; color: var(--ink-muted); margin-top: 6px; }
   .masthead h1 { font-size: clamp(30px, 4vw, 42px); margin-top: 10px; }
   .masthead .sub { color: var(--ink-2); margin-top: 8px; font-size: 15px; max-width: 60ch; }
-  .kpi-row {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0,1fr));
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-top: 28px;
-  }
-  .kpi {
-    background: var(--surface);
-    padding: 16px 18px;
-  }
-  .kpi .label { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
-  .kpi .value { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 30px; margin-top: 4px; }
-  .kpi .value.good { color: var(--good); }
-  .kpi .value.bad { color: var(--critical); }
-  .kpi .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
-
-  @media (max-width: 720px) {
-    .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  }
-
   /* ---------- Filter bar ---------- */
   .filter-bar {
     max-width: 1040px;
@@ -348,13 +377,6 @@
     * { transition: none !important; }
   }
 
-  /* ---------- At a glance ---------- */
-  .glance { margin-top: 28px; padding: 18px 22px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px; }
-  .glance .g-label { font-size: 11.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
-  .glance .g-main { font-family: "Rajdhani", sans-serif; font-weight: 700; font-size: 20px; margin-top: 4px; line-height: 1.25; }
-  .glance .g-line { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
-  .glance .g-line .champ-icon { display: inline-block; vertical-align: -4px; margin-right: 4px; }
-  @media (max-width: 720px) { .glance { grid-template-columns: 1fr; } }
 
   /* ---------- Style profile ---------- */
   .labels-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--gridline); }
@@ -373,7 +395,6 @@
   /* Phones: name, value and confidence on one line, the bar full-width underneath. */
   @media (max-width: 720px) {
     .filter-bar { padding: 0 20px; }
-    .kpi .value { font-size: 22px; overflow-wrap: anywhere; }
     .divbar-row, .divbar-row.style-row, .divbar-row.marker-row { grid-template-columns: 1fr auto auto; row-gap: 6px; }
     .divbar-row .divbar-label { grid-row: 1; grid-column: 1; }
     .divbar-row .divbar-value { grid-row: 1; grid-column: 2; }
@@ -425,12 +446,13 @@
 </head>
 <body>
 
-<div class="masthead">
+<div class="masthead" id="hero">
+  <div class="hero-art" id="hero-art" aria-hidden="true"></div>
   <div class="masthead-inner">
     <div class="eyebrow">Solo Queue &middot; Scouting Report</div>
     <h1 id="hdr-title">Loading&hellip;</h1>
     <p class="sub" id="hdr-sub">&nbsp;</p>
-    <div class="kpi-row" id="kpi-row"></div>
+    <div class="hero-body" id="hero-body"></div>
   </div>
 </div>
 
@@ -467,8 +489,6 @@
 
 <div class="wrap">
 
-  <div class="panel glance" id="glance"></div>
-
   <section id="section-style">
     <div class="section-head">
       <div class="eyebrow">Who you are</div>
@@ -476,6 +496,21 @@
       <p id="style-sub">&nbsp;</p>
     </div>
     <div class="panel" id="style-panel"></div>
+  </section>
+
+  <section id="section-map">
+    <div class="section-head">
+      <div class="eyebrow">Style map</div>
+      <h2 id="map-heading">Where you sit</h2>
+      <p id="map-sub">&nbsp;</p>
+    </div>
+    <div class="panel map-panel">
+      <div class="map-controls">
+        <div class="filter-field"><label for="map-x">Across (X)</label><select id="map-x"></select></div>
+        <div class="filter-field"><label for="map-y">Up (Y)</label><select id="map-y"></select></div>
+      </div>
+      <div id="style-map"></div>
+    </div>
   </section>
 
   <section id="section-pool">
@@ -767,6 +802,7 @@
     return wins / games.length;
   }
 
+  var heroStats = [];
   function renderHeader(filters, windowGames, champGames) {
     var title = filters.account + ' — Scouting Report';
     document.getElementById('hdr-title').textContent = title;
@@ -780,29 +816,16 @@
     var scopedWinRate = winRateOf(champGames);
     var scopeLabel = roleLabel(filters.role) + (filters.champion !== 'ALL' ? ' · ' + filters.champion : '');
 
-    var kpis = [
-      { label: 'Overall record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
+    heroStats = [
+      { label: 'Record', value: wins + 'W – ' + losses + 'L', foot: windowGames.length + ' games in window' },
       {
         label: scopeLabel + ' win rate',
         value: scopedWinRate === null ? '—' : pct(scopedWinRate * 100),
         foot: champGames.length + ' games',
         good: scopedWinRate !== null && scopedWinRate >= 0.5,
         bad: scopedWinRate !== null && scopedWinRate < 0.5
-      },
-      { label: 'Selected scope', value: scopeLabel, foot: champGames.length + ' of ' + windowGames.length + ' games in window' },
-      { label: 'Comparing vs.', value: filters.tier ? titleCase(filters.tier) + ' ' + regionLabel(filters.region) : '—', foot: 'reference tier' }
+      }
     ];
-    var kpiRow = document.getElementById('kpi-row');
-    kpiRow.innerHTML = '';
-    kpis.forEach(function (k) {
-      var el = document.createElement('div');
-      el.className = 'kpi';
-      el.innerHTML =
-        '<div class="label">' + k.label + '</div>' +
-        '<div class="value' + (k.good ? ' good' : '') + (k.bad ? ' bad' : '') + '">' + k.value + '</div>' +
-        '<div class="foot">' + k.foot + '</div>';
-      kpiRow.appendChild(el);
-    });
 
     document.getElementById('games-heading').textContent =
       (filters.windowSize > 0 ? 'Last ' + filters.windowSize : 'All ' + windowGames.length) + ' season ' + DATA.season + ' ranked games';
@@ -1238,53 +1261,220 @@
     });
   }
 
-  // ---------- At a glance ----------
-  function renderGlance(filters, champGames, roleGames) {
-    var glance = document.getElementById('glance');
+  // ---------- Player card (top of the page) ----------
+  function mostPlayed(games) {
+    var counts = {};
+    games.forEach(function (g) { counts[g.champion] = (counts[g.champion] || 0) + 1; });
+    return Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] || (a < b ? -1 : 1); })[0] || null;
+  }
+
+  function renderHero(filters, champGames, roleGames, windowGames) {
+    var hero = document.getElementById('hero');
+    var art = document.getElementById('hero-art');
+    // Splash: the selected champion, else the most-played one in view (cropped at export).
+    var champ = filters.champion !== 'ALL' ? filters.champion : mostPlayed(champGames.length ? champGames : windowGames);
+    var splash = champ && DATA.champion_splashes && DATA.champion_splashes[champ];
+    art.style.backgroundImage = splash ? 'url(' + splash + ')' : '';
+    hero.classList.toggle('has-art', !!splash);
+
     var style = computeStyle(filters, champGames);
     var pool = computePool(filters, roleGames);
     var gaps = computeGaps(filters, champGames);
+    var html = '';
 
-    function cell(label, main, line) {
-      return '<div><div class="g-label">' + label + '</div><div class="g-main">' + main + '</div>' +
-        (line ? '<div class="g-line">' + line + '</div>' : '') + '</div>';
-    }
-    function shortState(state) {
-      if (state.state === 'all-roles') return 'Pick a role';
-      if (state.state === 'few-games') return 'Insufficient data (n=' + state.n + ')';
-      if (state.state === 'no-ref') return 'Insufficient reference (n=' + state.refN + ')';
-      return '';
-    }
-
-    var styleCell;
     if (style.state === 'ok') {
       var fits = style.labels.filter(function (l) { return l[1] >= MIN_LABEL_MATCH; });
-      var strongest = style.rows.slice(0, 2).map(function (r) { return r.trait + ' ' + ordinal(r.percentile); }).join(' · ');
-      styleCell = cell('Playstyle', fits.length ? Math.round(fits[0][1]) + '% ' + fits[0][0] : 'Mixed profile',
-        (fits[1] ? Math.round(fits[1][1]) + '% ' + fits[1][0] + ' · ' : '') + 'Strongest: ' + strongest);
+      html += '<div><div class="hero-kicker">' + scopeLabelOf(filters) + ' · closest archetype</div>' +
+        '<div class="hero-name">' + (fits.length ? fits[0][0] : 'Mixed profile') + '</div>' +
+        '<div class="hero-match">' + (fits.length ? '<strong>' + Math.round(fits[0][1]) + '% match</strong>' : 'No archetype above ' + MIN_LABEL_MATCH + '% match') +
+        (fits[1] ? ' · next: ' + Math.round(fits[1][1]) + '% ' + fits[1][0] : '') + ' · vs ' + tierLabelOf(filters) + '</div></div>';
+      html += '<div class="hero-badges">' + style.rows.slice(0, 3).map(function (r) {
+        return '<span class="badge"><b>' + ordinal(r.percentile) + '</b>' + r.trait + '</span>';
+      }).join('') + '</div>';
     } else {
-      styleCell = cell('Playstyle', shortState(style), '');
+      var why = style.state === 'all-roles' ? 'Pick a role to see your playstyle'
+        : style.state === 'few-games' ? 'Insufficient data (n=' + style.n + ' games)'
+        : 'Insufficient reference (n=' + style.refN + ')';
+      html += '<div><div class="hero-kicker">Closest archetype</div><div class="hero-name" style="font-size:26px;color:var(--ink-2)">' + why + '</div></div>';
     }
 
-    var poolCell;
+    var stats = heroStats.slice();
     if (pool.state === 'ok') {
       var icon = championIconImg(pool.top[0], 'sm');
-      poolCell = cell('Champion pool', fmt(pool.effective, 1) + ' effective champions',
-        (icon ? icon.outerHTML : '') + pool.top[0] + ' ' + pct(pool.top[1] * 100) + ' of games');
-    } else {
-      poolCell = cell('Champion pool', shortState(pool), '');
+      stats.push({ label: 'Champion pool', value: fmt(pool.effective, 1) + ' champions',
+        foot: (icon ? icon.outerHTML : '') + pool.top[0] + ' ' + pct(pool.top[1] * 100) + ' of games' });
     }
+    html += '<div class="hero-stats">' + stats.map(function (k) {
+      return '<div class="hero-stat"><div class="label">' + k.label + '</div>' +
+        '<div class="value' + (k.good ? ' good' : '') + (k.bad ? ' bad' : '') + '">' + k.value + '</div>' +
+        '<div class="foot">' + k.foot + '</div></div>';
+    }).join('') + '</div>';
 
-    var gapsCell;
     if (gaps.state === 'ok') {
-      gapsCell = gaps.gaps.length
-        ? cell('Biggest gaps', gaps.gaps.slice(0, 2).map(function (g) { return featureLabel(g.feature); }).join(' · '),
-            gaps.gaps.map(function (g) { return featureLabel(g.feature) + ' ' + ordinal(g.percentile); }).join(' · ') + ' vs ' + tierLabelOf(filters))
-        : cell('Biggest gaps', 'No clear gaps', 'vs ' + tierLabelOf(filters));
-    } else {
-      gapsCell = cell('Biggest gaps', shortState(gaps), '');
+      html += '<div class="hero-gaps">' + (gaps.gaps.length
+        ? 'Biggest gaps: ' + gaps.gaps.map(function (g) { return '<strong>' + featureLabel(g.feature) + '</strong> ' + ordinal(g.percentile); }).join(' · ')
+        : 'No clear gaps vs ' + tierLabelOf(filters)) + '</div>';
     }
-    glance.innerHTML = styleCell + poolCell + gapsCell;
+    document.getElementById('hero-body').innerHTML = html;
+  }
+
+  // ---------- Style map ----------
+  // Every reference player as a dot on two trait axes (percentiles within the selected tier),
+  // you highlighted, other tiers' median players as landmarks. Axes default to your two most
+  // distinctive traits; a pick sticks until the role changes.
+  var mapX = document.getElementById('map-x'), mapY = document.getElementById('map-y');
+  var mapPick = { role: null, x: null, y: null };
+  [mapX, mapY].forEach(function (el) {
+    el.addEventListener('change', function () {
+      mapPick = { role: roleSelect.value, x: mapX.value, y: mapY.value };
+      renderAll();
+    });
+  });
+
+  function svgEl(tag, attrs, text) {
+    var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+
+  var mapResizeTimer = null, mapLastWidth = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(mapResizeTimer);
+    mapResizeTimer = setTimeout(function () {
+      var w = document.getElementById('style-map').clientWidth;
+      if (w !== mapLastWidth) renderAll();
+    }, 200);
+  });
+
+  function renderMap(filters, games) {
+    var box = document.getElementById('style-map');
+    var controls = document.querySelector('.map-controls');
+    document.getElementById('map-heading').textContent =
+      'Where you sit among ' + tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' players';
+    var style = computeStyle(filters, games);
+    var role = DATA.roles[filters.role];
+    var points = role && tierCurves(role.trait_points, filters);
+    if (style.state !== 'ok' || !points) {
+      controls.hidden = true;
+      document.getElementById('map-sub').textContent = '';
+      box.innerHTML = emptyState(style.state !== 'ok' ? stateMessage(style, filters, 'style map')
+        : stateMessage({ state: 'no-ref', refN: refCount(role.style_reference, filters) }, filters));
+      return;
+    }
+    var axes = PM.defaultMapAxes(style.rows);
+    if (!axes) {
+      controls.hidden = true;
+      box.innerHTML = emptyState('Insufficient data: the map needs at least two traits with data.');
+      return;
+    }
+    controls.hidden = false;
+    var curves = tierCurves(role.style_reference, filters);
+    var available = style.rows.map(function (r) { return r.trait; });
+    if (mapPick.role === filters.role && mapPick.x !== mapPick.y &&
+        available.indexOf(mapPick.x) !== -1 && available.indexOf(mapPick.y) !== -1) {
+      axes = [mapPick.x, mapPick.y];
+    }
+    var xT = axes[0], yT = axes[1];
+    [[mapX, xT], [mapY, yT]].forEach(function (pair) {
+      pair[0].innerHTML = '';
+      role.traits.filter(function (t) { return available.indexOf(t) !== -1; }).forEach(function (t) {
+        var o = document.createElement('option'); o.value = t; o.textContent = t; pair[0].appendChild(o);
+      });
+      pair[0].value = pair[1];
+    });
+
+    var xi = role.traits.indexOf(xT), yi = role.traits.indexOf(yT);
+    var you = {};
+    style.rows.forEach(function (r) { you[r.trait] = r.percentile; });
+
+    document.getElementById('map-sub').textContent =
+      'Each dot is one ' + tierLabelOf(filters) + ' ' + roleLabel(filters.role) + ' player (' + points.length +
+      ' players, 10+ games each), placed by two of their traits as percentiles within that tier. The axes start on your two most ' +
+      'distinctive traits; pick any pair. Diamonds mark the median player of the other tiers.';
+
+    // Drawn at the real width (not scaled), so text stays readable on phones.
+    var W = Math.max(300, Math.min(640, box.clientWidth || 640)), H = Math.round(W * 0.69);
+    var L = 54, R = W - 22, T = 18, B = H - 52;
+    function sx(p) { return L + (R - L) * p / 100; }
+    function sy(p) { return B - (B - T) * p / 100; }
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': 'Style map: ' + xT + ' across, ' + yT + ' up. You: ' + ordinal(you[xT]) + ' and ' + ordinal(you[yT]) + '.' });
+    [0, 25, 75, 100].forEach(function (p) {
+      svg.appendChild(svgEl('line', { x1: sx(p), x2: sx(p), y1: T, y2: B, class: 'map-grid' }));
+      svg.appendChild(svgEl('line', { x1: L, x2: R, y1: sy(p), y2: sy(p), class: 'map-grid' }));
+    });
+    svg.appendChild(svgEl('line', { x1: sx(50), x2: sx(50), y1: T, y2: B, class: 'map-mid' }));
+    svg.appendChild(svgEl('line', { x1: L, x2: R, y1: sy(50), y2: sy(50), class: 'map-mid' }));
+    [0, 50, 100].forEach(function (p) {
+      svg.appendChild(svgEl('text', { x: sx(p), y: B + 16, 'text-anchor': 'middle', class: 'map-tick' }, p));
+      svg.appendChild(svgEl('text', { x: L - 8, y: sy(p) + 4, 'text-anchor': 'end', class: 'map-tick' }, p));
+    });
+    svg.appendChild(svgEl('text', { x: (L + R) / 2, y: H - 10, 'text-anchor': 'middle', class: 'map-axis' }, xT + ' percentile →'));
+    svg.appendChild(svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', class: 'map-axis',
+      transform: 'translate(16,' + (T + B) / 2 + ') rotate(-90)' }, yT + ' percentile →'));
+
+    // Archetype names lean the way their signature points on these two traits.
+    var placed = [];
+    Object.keys(role.archetypes).forEach(function (name) {
+      var sig = role.archetypes[name], wx = sig[xT] || 0, wy = sig[yT] || 0;
+      if (!wx && !wy) return;
+      var m = Math.max(Math.abs(wx), Math.abs(wy));
+      var px = 50 + 40 * wx / m, py = 50 + 40 * wy / m;
+      while (placed.some(function (q) { return Math.abs(q[0] - px) < 22 && Math.abs(q[1] - py) < 5; })) py -= 6;
+      placed.push([px, py]);
+      svg.appendChild(svgEl('text', { x: sx(px), y: sy(py), class: 'map-arch',
+        'text-anchor': px > 70 ? 'end' : px < 30 ? 'start' : 'middle' }, name));
+    });
+
+    points.forEach(function (p) {
+      if (p[xi] === null || p[yi] === null) return;
+      svg.appendChild(svgEl('circle', {
+        cx: sx(percentileFromBreakpoints(p[xi], curves[xT].breakpoints)),
+        cy: sy(percentileFromBreakpoints(p[yi], curves[yT].breakpoints)), r: 3.2, class: 'map-dot'
+      }));
+    });
+
+    var tierRef = role.style_reference[filters.region] || {};
+    var marks = [];
+    (DATA.tiers || []).forEach(function (t) {
+      var ref = tierRef[t];
+      if (t === filters.tier || !ref || !ref[xT] || !ref[yT]) return;
+      var px = percentileFromBreakpoints(ref[xT].median, curves[xT].breakpoints);
+      var py = percentileFromBreakpoints(ref[yT].median, curves[yT].breakpoints);
+      var g = svgEl('g', { tabindex: 0 });
+      g.appendChild(svgEl('path', { d: 'M' + sx(px) + ' ' + (sy(py) - 7) + ' l7 7 l-7 7 l-7 -7 z', class: 'map-landmark' }));
+      // Two medians close together: put the second label on the other side.
+      var crowded = marks.some(function (q) { return Math.abs(q[0] - px) < 14 && Math.abs(q[1] - py) < 6; });
+      marks.push([px, py]);
+      g.appendChild(svgEl('text', { x: sx(px) + (crowded ? -10 : 10), y: sy(py) + (crowded ? 16 : 4),
+        'text-anchor': crowded ? 'end' : 'start', class: 'map-landmark-label' }, titleCase(t)));
+      attachTooltip(g, '<div class="tt-title">Median ' + titleCase(t) + ' ' + regionLabel(filters.region) + ' player</div>' +
+        '<div class="tt-row"><span>' + xT + '</span><strong>' + ordinal(px) + '</strong></div>' +
+        '<div class="tt-row"><span>' + yT + '</span><strong>' + ordinal(py) + '</strong></div>');
+      svg.appendChild(g);
+    });
+
+    var yx = sx(you[xT]), yy = sy(you[yT]);
+    var right = you[xT] > 85;
+    var me = svgEl('g', { tabindex: 0 });
+    me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 8, class: 'map-you-halo' }));
+    me.appendChild(svgEl('circle', { cx: yx, cy: yy, r: 8, class: 'map-you' }));
+    me.appendChild(svgEl('text', { x: yx + (right ? -13 : 13), y: yy - 10, 'text-anchor': right ? 'end' : 'start', class: 'map-you-label' }, 'You'));
+    attachTooltip(me, '<div class="tt-title">You · ' + filters.account + '</div>' +
+      '<div class="tt-row"><span>' + xT + '</span><strong>' + ordinal(you[xT]) + '</strong></div>' +
+      '<div class="tt-row"><span>' + yT + '</span><strong>' + ordinal(you[yT]) + '</strong></div>');
+    svg.appendChild(me);
+
+    box.innerHTML = '';
+    box.appendChild(svg);
+    mapLastWidth = box.clientWidth;
+    var note = document.createElement('p');
+    note.className = 'map-note';
+    note.textContent = 'Percentile axes spread the dots evenly along each one, so look at the shape: a diagonal band means the two traits ' +
+      'go together. Archetype names show which way each archetype leans on these two traits; they are directions, not borders ' +
+      '(the data has no clean clusters).';
+    box.appendChild(note);
   }
 
   // ---------- vs. Pro ----------
@@ -1465,8 +1655,9 @@
     var champGames = filters.champion === 'ALL' ? roleGames : roleGames.filter(function (g) { return g.champion === filters.champion; });
 
     renderHeader(filters, windowGames, champGames);
-    renderGlance(filters, champGames, roleGames);
+    renderHero(filters, champGames, roleGames, windowGames);
     renderStyle(filters, champGames);
+    renderMap(filters, champGames);
     renderPool(filters, roleGames);
     renderPercentiles(filters, champGames);
     renderGaps(filters, champGames);

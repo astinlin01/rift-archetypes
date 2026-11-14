@@ -125,3 +125,54 @@ def test_json_number():
     assert json_number(None) is None
     assert json_number(np.float64(1.234567)) == 1.2346
     assert json.dumps(json_number(np.int64(3))) == "3"
+
+
+# --- Style map: one point per reference player ------------------------------------------------------
+# The map plots every qualifying reference player (10+ games) as their average trait scores,
+# in the role's trait order; the page turns them into percentiles with the tier's curves.
+
+from dashboard_payload import crop_splash, player_trait_points, splash_champions
+
+
+def test_player_trait_points_are_player_averages():
+    rows = rows_for({"a": 10, "b": 12, "few": 3})
+    # a: Lane Bully all 1.0, Duelist 0.0/2.0 alternating -> 1.0; b: 2.0 and 4.0; few: excluded
+    scores = pd.DataFrame({
+        "Lane Bully": [1.0] * 10 + [2.0] * 12 + [9.0] * 3,
+        "Duelist": [0.0, 2.0] * 5 + [4.0] * 12 + [9.0] * 3,
+    })
+    points = player_trait_points(rows, scores, ["Lane Bully", "Duelist"], ["NA1"], ["CHALLENGER"], min_players=2)
+    assert sorted(points["NA1"]["CHALLENGER"]) == [[1.0, 1.0], [2.0, 4.0]]
+
+
+def test_player_trait_points_missing_is_null_and_small_tiers_dropped():
+    rows = rows_for({"a": 10, "b": 10})
+    scores = pd.DataFrame({"Lane Bully": [np.nan] * 10 + [0.12345] * 10})
+    points = player_trait_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=2)
+    assert sorted(points["NA1"]["CHALLENGER"], key=str) == [[0.123], [None]]  # 3 decimals
+    assert player_trait_points(rows, scores, ["Lane Bully"], ["NA1"], ["CHALLENGER"], min_players=3) == {}
+
+
+# --- Player card splash art -----------------------------------------------------------------------
+
+def test_splash_champions_top_pick_per_account_and_role():
+    games = pd.DataFrame({
+        "account": ["main"] * 9 + ["alt"] * 4,
+        "teamPosition": ["BOTTOM"] * 6 + ["TOP"] * 3 + ["MIDDLE"] * 4,
+        "championName": ["Kaisa"] * 4 + ["Ezreal"] * 2 + ["Gnar"] * 3 + ["Ahri"] * 4,
+    })
+    # main BOTTOM -> Kaisa (6 games >= 5). main TOP has 3 games and alt MIDDLE has 4: too few
+    # for a role card, but each account's overall top pick is kept for the all-roles view.
+    assert splash_champions(games, min_games=5) == {"Kaisa", "Ahri"}
+
+
+def test_crop_splash_shape_and_size():
+    from io import BytesIO
+
+    from PIL import Image
+    source = BytesIO()
+    Image.effect_noise((1215, 717), 64).convert("RGB").save(source, "JPEG", quality=95)  # splash size
+    out = crop_splash(source.getvalue(), width=1200, height=480)
+    image = Image.open(BytesIO(out))
+    assert image.format == "JPEG" and image.size == (1200, 480)
+    assert len(out) < len(source.getvalue())
