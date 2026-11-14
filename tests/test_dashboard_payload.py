@@ -176,3 +176,38 @@ def test_crop_splash_shape_and_size():
     image = Image.open(BytesIO(out))
     assert image.format == "JPEG" and image.size == (1200, 480)
     assert len(out) < len(source.getvalue())
+
+
+# --- Enchanter only where it can happen ----------------------------------------------------------
+# Heals/shields on teammates are zero in 86-94% of TOP/MIDDLE/BOTTOM games (82-93% of games are
+# on champions that essentially never do it; checked 2026-11-13, season 16). There the
+# champion-adjusted score mostly reflects which champions you play, so the trait is dropped,
+# as it already was for JUNGLE.
+
+from dashboard_payload import role_traits
+from playstyle_space import ROLE_ARCHETYPES
+from style_profile import soft_labels
+
+
+@pytest.mark.parametrize("role", ["TOP", "JUNGLE", "MIDDLE", "BOTTOM"])
+def test_enchanter_only_for_support(role):
+    assert "Enchanter" not in [t for t, _ in role_traits(role)]
+
+
+def test_enchanter_kept_for_support():
+    assert "Enchanter" in [t for t, _ in role_traits("UTILITY")]
+
+
+def test_archetypes_only_use_traits_their_role_has():
+    for role, archetypes in ROLE_ARCHETYPES.items():
+        available = {t for t, _ in role_traits(role)}
+        for name, signature in archetypes.items():
+            assert set(signature) <= available, f"{role} {name} uses {set(signature) - available}"
+
+
+def test_utility_mage_still_matches_on_cc_and_teamfighting():
+    traits = [t for t, _ in role_traits("BOTTOM")]
+    profile = pd.Series(0.0, index=traits)
+    profile[["Crowd Control", "Teamfighter"]] = [1.0, 0.5]
+    best = soft_labels(profile, "BOTTOM", ROLE_ARCHETYPES, top=1)[0]
+    assert best[0] == "Utility Mage" and best[1] > 90

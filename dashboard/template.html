@@ -1436,19 +1436,39 @@
     });
 
     var tierRef = role.style_reference[filters.region] || {};
-    var marks = [];
-    (DATA.tiers || []).forEach(function (t) {
+    var labelBoxes = [];  // [x0, y0, x1, y1] in SVG units, so tier labels never overlap
+    // Try right, left, below, above the marker; take the first spot that's free.
+    function placeLabel(x, y, text) {
+      var w = text.length * 6.6 + 4, h = 14;
+      var spots = [[x + 10, y + 4, 'start'], [x - 10, y + 4, 'end'], [x + 8, y + 20, 'start'],
+                   [x - 8, y + 20, 'end'], [x + 8, y - 10, 'start'], [x - 8, y - 10, 'end']];
+      function box(spot) {
+        var x0 = spot[2] === 'start' ? spot[0] : spot[0] - w;
+        return [x0, spot[1] - h + 3, x0 + w, spot[1] + 3];
+      }
+      var free = spots.filter(function (spot) {
+        var b = box(spot);
+        return !labelBoxes.some(function (o) { return b[0] < o[2] && o[0] < b[2] && b[1] < o[3] && o[1] < b[3]; });
+      });
+      var chosen = free[0] || spots[0];
+      labelBoxes.push(box(chosen));
+      return chosen;
+    }
+    var landmarks = (DATA.tiers || []).filter(function (t) {
       var ref = tierRef[t];
-      if (t === filters.tier || !ref || !ref[xT] || !ref[yT]) return;
-      var px = percentileFromBreakpoints(ref[xT].median, curves[xT].breakpoints);
-      var py = percentileFromBreakpoints(ref[yT].median, curves[yT].breakpoints);
+      return t !== filters.tier && ref && ref[xT] && ref[yT];
+    }).map(function (t) {
+      return { t: t, px: percentileFromBreakpoints(tierRef[t][xT].median, curves[xT].breakpoints),
+               py: percentileFromBreakpoints(tierRef[t][yT].median, curves[yT].breakpoints) };
+    });
+    // Reserve every marker's own spot first, so no label covers another tier's diamond.
+    landmarks.forEach(function (m) { labelBoxes.push([sx(m.px) - 8, sy(m.py) - 8, sx(m.px) + 8, sy(m.py) + 8]); });
+    landmarks.forEach(function (m) {
+      var t = m.t, px = m.px, py = m.py;
       var g = svgEl('g', { tabindex: 0 });
       g.appendChild(svgEl('path', { d: 'M' + sx(px) + ' ' + (sy(py) - 7) + ' l7 7 l-7 7 l-7 -7 z', class: 'map-landmark' }));
-      // Two medians close together: put the second label on the other side.
-      var crowded = marks.some(function (q) { return Math.abs(q[0] - px) < 14 && Math.abs(q[1] - py) < 6; });
-      marks.push([px, py]);
-      g.appendChild(svgEl('text', { x: sx(px) + (crowded ? -10 : 10), y: sy(py) + (crowded ? 16 : 4),
-        'text-anchor': crowded ? 'end' : 'start', class: 'map-landmark-label' }, titleCase(t)));
+      var spot = placeLabel(sx(px), sy(py), titleCase(t));
+      g.appendChild(svgEl('text', { x: spot[0], y: spot[1], 'text-anchor': spot[2], class: 'map-landmark-label' }, titleCase(t)));
       attachTooltip(g, '<div class="tt-title">Median ' + titleCase(t) + ' ' + regionLabel(filters.region) + ' player</div>' +
         '<div class="tt-row"><span>' + xT + '</span><strong>' + ordinal(px) + '</strong></div>' +
         '<div class="tt-row"><span>' + yT + '</span><strong>' + ordinal(py) + '</strong></div>');

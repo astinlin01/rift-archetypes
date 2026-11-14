@@ -310,11 +310,14 @@ TRAITS: list[tuple[str, tuple[str, ...]]] = [
 
 # Traits that read as nonsense for a role (e.g. "Jungle Farmer" for a bot laner whose
 # adjusted neutral CS is merely above the near-zero role average).
+# Enchanter outside support: heals/shields on teammates are zero in 86-94% of TOP/MIDDLE/BOTTOM
+# games, mostly on champions that never do it, so the champion-adjusted score there mostly
+# reflects champion mix, not play (checked 2026-11-13, season 16).
 ROLE_EXCLUDED_TRAITS: dict[str, frozenset[str]] = {
-    "TOP": frozenset({"Jungle Farmer"}),
+    "TOP": frozenset({"Jungle Farmer", "Enchanter"}),
     "JUNGLE": frozenset({"Farm-Focused", "Lane Bully", "Enchanter"}),
-    "MIDDLE": frozenset({"Jungle Farmer"}),
-    "BOTTOM": frozenset({"Jungle Farmer"}),
+    "MIDDLE": frozenset({"Jungle Farmer", "Enchanter"}),
+    "BOTTOM": frozenset({"Jungle Farmer", "Enchanter"}),
     "UTILITY": frozenset({"Jungle Farmer", "Farm-Focused", "Lane Bully"}),
 }
 
@@ -366,7 +369,7 @@ ROLE_ARCHETYPES: dict[str, dict[str, dict[str, float]]] = {
         "Aggressive Skirmisher": {"Death-Prone": 1, "Frontline": 1, "Duelist": 0.4, "Farm-Focused": -0.5},
         "Vision-Focused Carry": {"Vision Control": 1, "Farm-Focused": 0.4},
         "Low-Resource": {"Damage Carry": -1, "Farm-Focused": -1, "Duelist": -0.5},
-        "Utility Mage": {"Enchanter": 1, "Crowd Control": 1, "Teamfighter": 0.5},
+        "Utility Mage": {"Crowd Control": 1, "Teamfighter": 0.5},  # no Enchanter in BOTTOM
         "Ability-Heavy Carry": {"Skillshot Mage": 1.5},
     },
     "TOP": {
